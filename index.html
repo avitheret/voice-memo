@@ -82,7 +82,6 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
   transition: border-color 0.4s;
 }
 .viz-wrap.active  { border-color: var(--amber-dim); }
-.viz-wrap.wake-on { border-color: #4A5020; }
 
 .viz-label {
   position: absolute; top: 9px; left: 11px;
@@ -90,8 +89,6 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
   text-transform: uppercase; z-index: 2; transition: color 0.3s;
 }
 .viz-wrap.active .viz-label  { color: var(--amber-dim); }
-.viz-wrap.wake-on .viz-label { color: #6A7830; animation: wakeBreath 3s ease-in-out infinite; }
-@keyframes wakeBreath { 0%,100%{opacity:0.5} 50%{opacity:1} }
 
 .vu {
   position: absolute; bottom: 9px; right: 11px;
@@ -129,23 +126,6 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 .rec-timer { font-family: var(--display); font-size: 36px; letter-spacing: 0.08em; line-height: 1; color: var(--text); }
 .rec-hint { font-size: 9px; color: var(--text-faint); letter-spacing: 0.12em; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* Wake Word toggle */
-.wake-wrap { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 5px; }
-.wake-btn {
-  width: 38px; height: 38px; border-radius: 50%;
-  border: 1px solid var(--border-hi); background: var(--surface);
-  cursor: pointer; display: flex; align-items: center; justify-content: center;
-  transition: all 0.2s; color: var(--text-faint);
-}
-.wake-btn:hover { border-color: var(--text-dim); color: var(--text-dim); }
-.wake-btn.active {
-  border-color: #8AB020; background: #1A2008; color: #8AB020;
-  box-shadow: 0 0 14px rgba(138,176,32,0.2);
-  animation: wakePulse 2.5s ease-in-out infinite;
-}
-@keyframes wakePulse { 0%,100%{box-shadow:0 0 0 0 rgba(138,176,32,0.25)} 50%{box-shadow:0 0 0 8px rgba(138,176,32,0)} }
-.wake-label { font-size: 8px; letter-spacing: 0.15em; color: var(--text-faint); text-transform: uppercase; text-align: center; }
-.wake-btn.active + .wake-label { color: #6A8818; }
 
 /* Transcription */
 .section-label {
@@ -275,7 +255,6 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); display: inline-block; margin-right: 6px; }
 .dot.on  { background: var(--green); box-shadow: 0 0 7px rgba(74,140,92,0.5); animation: pulse 2s infinite; }
 .dot.err { background: var(--red); }
-.dot.wake { background: #8AB020; box-shadow: 0 0 7px rgba(138,176,32,0.4); animation: pulse 3s infinite; }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
 /* ── TOAST ──────────────────────── */
@@ -289,13 +268,6 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 @keyframes toastIn  { from{transform:translateX(16px);opacity:0} to{transform:translateX(0);opacity:1} }
 @keyframes toastOut { to{transform:translateX(10px);opacity:0} }
 
-/* Wake word triggered flash */
-.wake-flash {
-  position: fixed; inset: 0; background: rgba(138,176,32,0.06);
-  pointer-events: none; z-index: 100;
-  animation: wakeFlash 0.5s ease forwards;
-}
-@keyframes wakeFlash { 0%{opacity:1} 100%{opacity:0} }
 
 
 /* ── SYNC BAR ───────────────────────── */
@@ -383,16 +355,6 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
           <div class="rec-hint" id="recHint">CLICK TO BEGIN RECORDING</div>
         </div>
 
-        <!-- Wake Word toggle -->
-        <div class="wake-wrap" id="wakeWrap" title='Say "Record" to auto-start recording'>
-          <button class="wake-btn" id="wakeBtn">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/>
-            </svg>
-          </button>
-          <span class="wake-label" id="wakeLabel">RECORD</span>
-        </div>
       </div>
 
       <div class="section-label">Live Transcription</div>
@@ -489,27 +451,24 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 1, minor: 8 };
+const VERSION = { major: 1, minor: 9 };
 const SILENCE_MS = 5000;   // auto-stop after 5 s of silence
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
 const S = {
   recording:   false,
-  wakeMode:    false,
   finalTx:     '',
   interimTx:   '',
   memos:       JSON.parse(localStorage.getItem('voiceMemos') || '[]'),
   seconds:     0,
   timerID:     null,
   recognition: null,
-  wakeRec:     null,
   audioCtx:     null,
   analyser:     null,
   stream:       null,
   raf:          null,
   idlePhase:    0,
   silenceTimer:  null,
-  wakeCooldown:  false,
   syncCode:      localStorage.getItem('vmSyncCode') || genSyncCode(),
 };
 
@@ -534,8 +493,6 @@ const cx          = canvas.getContext('2d');
 const statusDot   = $('statusDot');
 const statusText  = $('statusText');
 const browserNote = $('browserNote');
-const wakeBtn     = $('wakeBtn');
-const wakeLabel   = $('wakeLabel');
 
 // ── VERSION BADGE ─────────────────────────────────────────────────────────────
 $('vMaj').textContent = VERSION.major;
@@ -547,13 +504,12 @@ const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
 if (!SR) {
   browserNote.textContent = '⚠ Speech recognition unavailable — use Chrome or Edge';
-  recBtn.disabled = wakeBtn.disabled = true;
+  recBtn.disabled = true;
   setStatus('err', 'UNSUPPORTED BROWSER');
 } else if (isIOS) {
-  browserNote.textContent = '📱 iPhone detected — see setup panel below';
+  browserNote.textContent = 'Say "Hey Siri, Record" to start — see setup panel below';
   setStatus('', 'IDLE');
 } else {
-  browserNote.textContent = 'Tip: click ◎ to listen for "Record" wake word';
   setStatus('', 'IDLE');
 }
 
@@ -577,98 +533,12 @@ if (new URLSearchParams(location.search).get('autostart') === '1') {
   setTimeout(() => recBtn.click(), 900);
 }
 
-// ── WAKE WORD TOGGLE ──────────────────────────────────────────────────────────
-wakeBtn.addEventListener('click', () => {
-  if (!SR) return;
-  S.wakeMode ? stopWake() : startWake();
-});
-
-// Always build a fresh SR instance — reusing an ended instance throws
-// InvalidStateError in Chrome (silently swallowed, kills wake mode).
-function makeWakeRec() {
-  const wr = new SR();
-  wr.continuous     = true;
-  wr.interimResults = true;
-  wr.lang           = 'en-US';
-
-  wr.onresult = e => {
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      const t = (e.results[i][0]?.transcript ?? '').toLowerCase().replace(/[^a-z\s]/g, '');
-      if (/\brecord\b/.test(t)) { triggerFromWake(); return; }
-    }
-  };
-
-  wr.onerror = ev => {
-    if (ev.error === 'not-allowed') { stopWake(); toast('Mic permission denied'); }
-    // other errors → onend fires → restarts automatically
-  };
-
-  // Key fix: create a FRESH instance each restart instead of reusing the old one
-  wr.onend = () => {
-    if (S.wakeMode && !S.recording) {
-      setTimeout(() => {
-        if (S.wakeMode && !S.recording) {
-          S.wakeRec = makeWakeRec();
-          try { S.wakeRec.start(); } catch(_) {}
-        }
-      }, 200);
-    }
-  };
-
-  return wr;
-}
-
-function startWake() {
-  if (S.recording) return;
-  S.wakeMode = true;
-  wakeBtn.classList.add('active');
-  wakeLabel.textContent = 'LISTENING';
-  vizWrap.classList.add('wake-on');
-  vizLabel.textContent = 'LISTENING FOR "RECORD"';
-  setStatus('wake', 'WAKE WORD ACTIVE');
-  browserNote.textContent = 'Say "Record" to start recording';
-  drawScan();
-
-  S.wakeRec = makeWakeRec();
-  try { S.wakeRec.start(); } catch(e) { toast('Mic permission denied'); stopWake(); }
-}
-
-function stopWake() {
-  S.wakeMode = false;
-  wakeBtn.classList.remove('active');
-  wakeLabel.textContent = 'RECORD';
-  vizWrap.classList.remove('wake-on');
-  vizLabel.textContent = 'AUDIO INPUT';
-  setStatus('', 'IDLE');
-  browserNote.textContent = SR ? 'Tip: click ◎ to listen for "Record" wake word' : '';
-  cancelAnimationFrame(S.raf);
-  drawIdle();
-  if (S.wakeRec) { try { S.wakeRec.abort(); } catch(_) {} S.wakeRec = null; }
-}
-
-function triggerFromWake() {
-  if (S.recording || S.wakeCooldown) return;                          // guard double-trigger
-  const wr = S.wakeRec; S.wakeRec = null;           // detach before abort so onend won't restart
-  if (wr) { try { wr.abort(); } catch(_) {} }
-
-  const flash = document.createElement('div');
-  flash.className = 'wake-flash';
-  document.body.appendChild(flash);
-  setTimeout(() => flash.remove(), 600);
-
-  toast('Wake word detected — recording started');
-  startRec();
-}
-
 // ── RECORD ────────────────────────────────────────────────────────────────────
 recBtn.addEventListener('click', () => S.recording ? stopRec() : startRec());
 
 async function startRec() {
   if (!SR || S.recording) return;
-  S.recording = true;   // set immediately — closes race window with wakeRec.onend
-
-  // Discard any lingering wake rec (triggerFromWake already nulled it, but be safe)
-  if (S.wakeRec) { try { S.wakeRec.abort(); } catch(_) {} S.wakeRec = null; }
+  S.recording = true;
 
   // Mic → analyser for live waveform
   try {
@@ -721,7 +591,6 @@ async function startRec() {
 
   S.seconds = 0;
   recBtn.classList.add('recording');
-  vizWrap.classList.remove('wake-on');
   vizWrap.classList.add('active');
   vizLabel.textContent = 'AUDIO INPUT';
   recLabel.textContent = '● REC'; recLabel.classList.add('live');
@@ -755,20 +624,8 @@ function stopRec(autoStopped = false) {
   clearBtn.disabled = !hasText;
   if (!hasText && !S.interimTx.trim()) renderTx();
 
-  // Resume wake mode after recording stops
-  if (S.wakeMode) {
-    setStatus('wake', 'WAKE WORD ACTIVE');
-    vizWrap.classList.add('wake-on');
-    vizLabel.textContent = 'LISTENING FOR "RECORD"';
-    drawScan();
-    setTimeout(() => {
-      S.wakeRec = makeWakeRec();
-      try { S.wakeRec.start(); } catch(_) {}
-    }, 600);
-  } else {
-    setStatus('', 'IDLE');
-    drawIdle();
-  }
+  setStatus('', 'IDLE');
+  drawIdle();
 }
 
 // ── TRANSCRIPTION ─────────────────────────────────────────────────────────────
@@ -803,7 +660,6 @@ saveBtn.addEventListener('click', () => {
   S.finalTx = ''; S.interimTx = ''; S.seconds = 0;
   recTimer.textContent = '00:00';
   renderTx(); saveBtn.disabled = clearBtn.disabled = true;
-  S.wakeCooldown = true; setTimeout(() => { S.wakeCooldown = false; }, 3000);
   renderMemos(); toast('Memo saved');
   saveRemoteMemos();
 });
@@ -925,23 +781,6 @@ function drawIdle() {
   for (let i = 0; i < N; i++) {
     cx.fillStyle = 'rgba(232,160,32,0.10)';
     cx.fillRect(i*(bw+gap)+gap/2, H/2-1, bw, 2);
-  }
-}
-
-let scanPhase = 0;
-function drawScan() {
-  if (!S.wakeMode || S.recording) return;
-  S.raf = requestAnimationFrame(drawScan);
-  scanPhase += 0.025;
-  const W = canvas.offsetWidth, H = canvas.offsetHeight;
-  cx.clearRect(0, 0, W, H);
-  const N = 56, bw = (W/N)*0.55, gap = (W/N)*0.45;
-  for (let i = 0; i < N; i++) {
-    const wave = Math.sin(i*0.18 + scanPhase) * 0.5 + 0.5;
-    const v    = wave * 0.22;
-    const bh   = Math.max(1.5, v*H);
-    cx.fillStyle = `rgba(138,176,32,${0.15 + wave*0.25})`;
-    cx.fillRect(i*(bw+gap)+gap/2, (H-bh)/2, bw, bh);
   }
 }
 
