@@ -451,7 +451,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 1, minor: 9 };
+const VERSION = { major: 2, minor: 0 };
 const SILENCE_MS = 5000;   // auto-stop after 5 s of silence
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
@@ -864,30 +864,61 @@ function setSyncStatus(state, msg) {
   syncStatusEl.textContent = msg;
 }
 
-async function loadRemoteMemos() {
-  setSyncStatus('syncing', '⟳ SYNCING');
+// ── CONFLICT RESOLUTION ───────────────────────────────────────────────────────
+// Each save writes { memos, savedAt } to Netlify Blobs.
+// On sync: whichever side was saved MORE RECENTLY is the authoritative list for
+// deletions; memos created AFTER that timestamp on the other side are merged in.
+// This lets deletions propagate while never dropping a freshly dictated memo.
+
+let syncInFlight = false;
+
+async function loadRemoteMemos(quiet = false) {
+  if (S.recording || syncInFlight) return;
+  syncInFlight = true;
+  if (!quiet) setSyncStatus('syncing', '⟳ SYNCING');
   try {
     const res = await fetch('/api/memos?code=' + S.syncCode);
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    const remote = await res.json();
-    // Merge: union by id, newest first
-    const map = new Map();
-    [...S.memos, ...remote].forEach(m => { if (!map.has(m.id)) map.set(m.id, m); });
-    S.memos = [...map.values()].sort((a,b) => b.id - a.id);
-    persist(); renderMemos();
+    const { memos: remote, savedAt: remoteSavedAt = 0 } = await res.json();
+
+    const localSavedAt = parseInt(localStorage.getItem('vmSavedAt') || '0');
+    let merged;
+
+    if (remoteSavedAt > localSavedAt) {
+      // Remote is newer — use it as base, then add local memos created
+      // AFTER the remote was last saved (dictated locally, not yet pushed).
+      const localNew = S.memos.filter(m => m.id > remoteSavedAt);
+      const map = new Map();
+      [...remote, ...localNew].forEach(m => { if (!map.has(m.id)) map.set(m.id, m); });
+      merged = [...map.values()].sort((a, b) => b.id - a.id);
+    } else {
+      // Local is same age or newer — union merge so remote additions aren't lost.
+      const map = new Map();
+      [...S.memos, ...remote].forEach(m => { if (!map.has(m.id)) map.set(m.id, m); });
+      merged = [...map.values()].sort((a, b) => b.id - a.id);
+    }
+
+    const changed = JSON.stringify(merged) !== JSON.stringify(S.memos);
+    S.memos = merged;
+    persist();
+    if (changed) renderMemos();
     setSyncStatus('synced', '✓ SYNCED');
   } catch(e) {
     setSyncStatus('error', '✗ OFFLINE');
+  } finally {
+    syncInFlight = false;
   }
 }
 
 async function saveRemoteMemos() {
+  const savedAt = Date.now();
+  localStorage.setItem('vmSavedAt', String(savedAt));
   setSyncStatus('syncing', '⟳ SAVING');
   try {
     const res = await fetch('/api/memos', {
       method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ code: S.syncCode, memos: S.memos }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: S.syncCode, memos: S.memos, savedAt }),
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     setSyncStatus('synced', '✓ SYNCED');
@@ -896,7 +927,12 @@ async function saveRemoteMemos() {
   }
 }
 
-// Load remote memos on startup
+// ── AUTO-SYNC TRIGGERS ────────────────────────────────────────────────────────
+setInterval(() => loadRemoteMemos(true), 30_000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) loadRemoteMemos(true); });
+window.addEventListener('focus', () => loadRemoteMemos(true));
+
+// Initial load
 loadRemoteMemos();
 
 </script>
