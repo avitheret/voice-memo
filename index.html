@@ -527,6 +527,41 @@ wakeBtn.addEventListener('click', () => {
   S.wakeMode ? stopWake() : startWake();
 });
 
+// Always build a fresh SR instance — reusing an ended instance throws
+// InvalidStateError in Chrome (silently swallowed, kills wake mode).
+function makeWakeRec() {
+  const wr = new SR();
+  wr.continuous     = true;
+  wr.interimResults = true;
+  wr.lang           = 'en-US';
+
+  wr.onresult = e => {
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i].transcript.toLowerCase().replace(/[^a-z\s]/g, '');
+      if (t.includes('record')) { triggerFromWake(); return; }
+    }
+  };
+
+  wr.onerror = ev => {
+    if (ev.error === 'not-allowed') { stopWake(); toast('Mic permission denied'); }
+    // other errors → onend fires → restarts automatically
+  };
+
+  // Key fix: create a FRESH instance each restart instead of reusing the old one
+  wr.onend = () => {
+    if (S.wakeMode && !S.recording) {
+      setTimeout(() => {
+        if (S.wakeMode && !S.recording) {
+          S.wakeRec = makeWakeRec();
+          try { S.wakeRec.start(); } catch(_) {}
+        }
+      }, 200);
+    }
+  };
+
+  return wr;
+}
+
 function startWake() {
   if (S.recording) return;
   S.wakeMode = true;
@@ -538,33 +573,8 @@ function startWake() {
   browserNote.textContent = 'Say "Record" to start recording';
   drawScan();
 
-  S.wakeRec = new SR();
-  S.wakeRec.continuous     = true;
-  S.wakeRec.interimResults = true;
-  S.wakeRec.lang           = 'en-US';
-
-  S.wakeRec.onresult = e => {
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      const t = e.results[i].transcript.toLowerCase().replace(/[^a-z\s]/g,'');
-      if (t.includes('record')) {
-        triggerFromWake();
-        break;
-      }
-    }
-  };
-
-  S.wakeRec.onerror = ev => {
-    if (ev.error === 'not-allowed') { stopWake(); toast('Mic permission denied'); }
-  };
-
-  // Keep alive — restart after each session
-  S.wakeRec.onend = () => {
-    if (S.wakeMode && !S.recording) {
-      setTimeout(() => { try { S.wakeRec.start(); } catch(_) {} }, 300);
-    }
-  };
-
-  try { S.wakeRec.start(); } catch(e) {}
+  S.wakeRec = makeWakeRec();
+  try { S.wakeRec.start(); } catch(e) { toast('Mic permission denied'); stopWake(); }
 }
 
 function stopWake() {
@@ -577,18 +587,19 @@ function stopWake() {
   browserNote.textContent = SR ? 'Tip: click ◎ to listen for "Record" wake word' : '';
   cancelAnimationFrame(S.raf);
   drawIdle();
-  if (S.wakeRec) { try { S.wakeRec.stop(); } catch(_) {} S.wakeRec = null; }
+  if (S.wakeRec) { try { S.wakeRec.abort(); } catch(_) {} S.wakeRec = null; }
 }
 
 function triggerFromWake() {
-  // Flash feedback
+  if (S.recording) return;                          // guard double-trigger
+  const wr = S.wakeRec; S.wakeRec = null;           // detach before abort so onend won't restart
+  if (wr) { try { wr.abort(); } catch(_) {} }
+
   const flash = document.createElement('div');
   flash.className = 'wake-flash';
   document.body.appendChild(flash);
   setTimeout(() => flash.remove(), 600);
 
-  // Stop wake listener, start real recording
-  if (S.wakeRec) { try { S.wakeRec.abort(); } catch(_) {} S.wakeRec = null; }
   toast('Wake word detected — recording started');
   startRec();
 }
@@ -598,12 +609,10 @@ recBtn.addEventListener('click', () => S.recording ? stopRec() : startRec());
 
 async function startRec() {
   if (!SR || S.recording) return;
+  S.recording = true;   // set immediately — closes race window with wakeRec.onend
 
-  // Pause wake mode during recording
-  if (S.wakeMode && S.wakeRec) {
-    try { S.wakeRec.abort(); } catch(_) {}
-    S.wakeRec = null;
-  }
+  // Discard any lingering wake rec (triggerFromWake already nulled it, but be safe)
+  if (S.wakeRec) { try { S.wakeRec.abort(); } catch(_) {} S.wakeRec = null; }
 
   // Mic → analyser for live waveform
   try {
@@ -642,7 +651,7 @@ async function startRec() {
 
   S.recognition.start();
 
-  S.recording = true; S.seconds = 0;
+  S.seconds = 0;
   recBtn.classList.add('recording');
   vizWrap.classList.remove('wake-on');
   vizWrap.classList.add('active');
@@ -683,17 +692,7 @@ function stopRec() {
     vizLabel.textContent = 'LISTENING FOR "RECORD"';
     drawScan();
     setTimeout(() => {
-      S.wakeRec = new SR();
-      S.wakeRec.continuous = true; S.wakeRec.interimResults = true; S.wakeRec.lang = 'en-US';
-      S.wakeRec.onresult = e => {
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          const t = e.results[i].transcript.toLowerCase().replace(/[^a-z\s]/g,'');
-          if (t.includes('record')) { triggerFromWake(); break; }
-        }
-      };
-      S.wakeRec.onend = () => {
-        if (S.wakeMode && !S.recording) setTimeout(() => { try { S.wakeRec.start(); } catch(_) {} }, 300);
-      };
+      S.wakeRec = makeWakeRec();
       try { S.wakeRec.start(); } catch(_) {}
     }, 600);
   } else {
