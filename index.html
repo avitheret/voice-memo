@@ -489,7 +489,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 1, minor: 6 };
+const VERSION = { major: 1, minor: 7 };
 const SILENCE_MS = 5000;   // auto-stop after 5 s of silence
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
@@ -784,6 +784,10 @@ function esc(s) {
 
 // ── SAVE / CLEAR ──────────────────────────────────────────────────────────────
 saveBtn.addEventListener('click', () => {
+  // Stop recording first — prevents the timer resetting to 0 mid-recording
+  // and ensures the mic is released before we save.
+  if (S.recording) stopRec();
+
   const text = S.finalTx.trim();
   if (!text) return;
   const memo = { id: Date.now(), text, duration: S.seconds, date: new Date().toISOString() };
@@ -886,9 +890,9 @@ function drawLive() {
   }
   const db = sum/N > 0.001 ? Math.round(20*Math.log10(sum/N)) : -Infinity;
   vuMeter.textContent = isFinite(db) ? `${db} dB` : '–∞ dB';
-
-  // Audio energy detected → push silence window out
-  if (sum / N > 0.02) resetSilenceTimer();
+  // NOTE: silence timer is reset only by onresult (actual speech), not by
+  // raw audio energy — mic hiss / ambient noise would otherwise prevent
+  // the 5-second countdown from ever completing.
 }
 
 function drawFakeWave() {
