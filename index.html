@@ -153,6 +153,20 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 .tx-actions { display: flex; gap: 10px; flex-shrink: 0; }
 
+/* ── LANGUAGE TOGGLE ────────────────── */
+.lang-row { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.lang-row .section-label { flex: 1; }
+.lang-toggle { display: flex; flex-shrink: 0; }
+.lang-btn {
+  padding: 2px 9px; font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em;
+  border: 1px solid var(--border); background: transparent; color: var(--text-faint);
+  cursor: pointer; transition: all 0.15s;
+}
+.lang-btn:first-child { border-radius: 1px 0 0 1px; }
+.lang-btn:last-child  { border-radius: 0 1px 1px 0; border-left: none; }
+.lang-btn.active      { background: var(--surface2); color: var(--amber); border-color: var(--amber-dim); }
+.lang-btn:not(.active):hover { color: var(--text-dim); background: var(--surface2); }
+
 /* Buttons */
 .btn { padding: 9px 18px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; cursor: pointer; border-radius: 1px; border: 1px solid; transition: all 0.15s; }
 .btn-primary { background: var(--amber); border-color: var(--amber); color: #0C0B09; font-weight: 500; }
@@ -357,7 +371,13 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
       </div>
 
-      <div class="section-label">Live Transcription</div>
+      <div class="lang-row">
+        <div class="section-label">Live Transcription</div>
+        <div class="lang-toggle">
+          <button class="lang-btn" data-lang="en-US" id="langEN">EN</button>
+          <button class="lang-btn" data-lang="he-IL" id="langHE">עב</button>
+        </div>
+      </div>
 
       <div class="tx-box">
         <div class="tx-text" id="txText"></div>
@@ -451,7 +471,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 2, minor: 0 };
+const VERSION = { major: 2, minor: 1 };
 const SILENCE_MS = 5000;   // auto-stop after 5 s of silence
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
@@ -470,6 +490,7 @@ const S = {
   idlePhase:    0,
   silenceTimer:  null,
   syncCode:      localStorage.getItem('vmSyncCode') || genSyncCode(),
+  lang:          localStorage.getItem('vmLang') || 'en-US',
 };
 
 // ── DOM ───────────────────────────────────────────────────────────────────────
@@ -555,7 +576,7 @@ async function startRec() {
   S.recognition = new SR();
   S.recognition.continuous     = true;
   S.recognition.interimResults = true;
-  S.recognition.lang           = 'en-US';
+  S.recognition.lang           = S.lang;
 
   S.recognition.onresult = e => {
     let speechDetected = false;
@@ -655,7 +676,7 @@ saveBtn.addEventListener('click', () => {
 
   const text = S.finalTx.trim();
   if (!text) return;
-  const memo = { id: Date.now(), text, duration: S.seconds, date: new Date().toISOString() };
+  const memo = { id: Date.now(), text, duration: S.seconds, date: new Date().toISOString(), lang: S.lang };
   S.memos.unshift(memo); persist();
   S.finalTx = ''; S.interimTx = ''; S.seconds = 0;
   recTimer.textContent = '00:00';
@@ -688,7 +709,7 @@ function renderMemos() {
         <span class="memo-idx">MEMO ${String(n).padStart(2,'0')}</span>
         <span class="memo-date">${ds}${m.duration ? ' · ' + fmt(m.duration) : ''}</span>
       </div>
-      <div class="memo-preview">${esc(m.text)}</div>
+      <div class="memo-preview"${m.lang === 'he-IL' ? ' dir="rtl" style="text-align:right"' : ''}>${esc(m.text)}</div>
       <div class="memo-acts">
         <button class="btn btn-ghost btn-sm" onclick="dlMemo(${m.id})">EXPORT ↓</button>
         <button class="btn btn-danger btn-sm" onclick="delMemo(${m.id})">DELETE</button>
@@ -727,6 +748,27 @@ document.querySelectorAll('.setup-tab').forEach(tab => {
     $('tab-' + tab.dataset.tab).classList.add('active');
   });
 });
+
+// ── LANGUAGE TOGGLE ───────────────────────────────────────────────────────────
+(function () {
+  const btns = document.querySelectorAll('.lang-btn');
+
+  function applyLang(lang) {
+    S.lang = lang;
+    localStorage.setItem('vmLang', lang);
+    btns.forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+    const isHe = lang === 'he-IL';
+    txText.dir = isHe ? 'rtl' : 'ltr';
+    txText.style.textAlign = isHe ? 'right' : '';
+    // Update live recognition language if active
+    if (S.recognition) S.recognition.lang = lang;
+  }
+
+  btns.forEach(btn => btn.addEventListener('click', () => applyLang(btn.dataset.lang)));
+
+  // Initialise on load
+  applyLang(S.lang);
+})();
 
 // ── SILENCE TIMER ─────────────────────────────────────────────────────────────
 function resetSilenceTimer() {
