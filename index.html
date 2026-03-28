@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>VOICE MEMO</title>
+<!-- PWA / iOS home screen -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Voice Memo">
+<meta name="theme-color" content="#0C0B09">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:          #0C0B09;
+  --surface:     #161410;
+  --surface2:    #1F1D19;
+  --border:      #2A2620;
+  --border-hi:   #3D3830;
+  --amber:       #E8A020;
+  --amber-dim:   #8A5F12;
+  --amber-glow:  rgba(232,160,32,0.15);
+  --amber-glow2: rgba(232,160,32,0.08);
+  --red:         #B91C1C;
+  --red-glow:    rgba(185,28,28,0.25);
+  --green:       #4A8C5C;
+  --text:        #EDE8DE;
+  --text-dim:    #7A7268;
+  --text-faint:  #3A3830;
+  --mono:        'IBM Plex Mono', monospace;
+  --display:     'Bebas Neue', cursive;
+}
+
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 13px; }
+
+body::after {
+  content: ''; position: fixed; inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  pointer-events: none; z-index: 999; opacity: 0.5;
+}
+
+/* ── SHELL ──────────────────────── */
+.app { display: grid; grid-template-rows: 56px 1fr 34px; height: 100vh; }
+
+/* ── HEADER ─────────────────────── */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 28px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.logo { font-family: var(--display); font-size: 26px; letter-spacing: 0.1em; color: var(--amber); display: flex; align-items: baseline; gap: 12px; }
+.logo-sub { font-family: var(--mono); font-size: 10px; font-weight: 300; letter-spacing: 0.25em; color: var(--text-dim); }
+.memo-count { font-size: 10px; letter-spacing: 0.2em; color: var(--text-dim); }
+.memo-count strong { color: var(--amber); font-weight: 500; }
+
+/* ── MAIN ───────────────────────── */
+main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
+
+/* ── LEFT PANEL ─────────────────── */
+.recorder-panel {
+  display: flex; flex-direction: column; gap: 18px;
+  padding: 22px 28px; border-right: 1px solid var(--border); overflow-y: auto;
+}
+.recorder-panel::-webkit-scrollbar { width: 3px; }
+.recorder-panel::-webkit-scrollbar-thumb { background: var(--border-hi); }
+
+/* Visualizer */
+.viz-wrap {
+  position: relative; background: var(--surface);
+  border: 1px solid var(--border); height: 100px; overflow: hidden; border-radius: 2px;
+  transition: border-color 0.4s;
+}
+.viz-wrap.active  { border-color: var(--amber-dim); }
+.viz-wrap.wake-on { border-color: #4A5020; }
+
+.viz-label {
+  position: absolute; top: 9px; left: 11px;
+  font-size: 9px; letter-spacing: 0.22em; color: var(--text-faint);
+  text-transform: uppercase; z-index: 2; transition: color 0.3s;
+}
+.viz-wrap.active .viz-label  { color: var(--amber-dim); }
+.viz-wrap.wake-on .viz-label { color: #6A7830; animation: wakeBreath 3s ease-in-out infinite; }
+@keyframes wakeBreath { 0%,100%{opacity:0.5} 50%{opacity:1} }
+
+.vu {
+  position: absolute; bottom: 9px; right: 11px;
+  font-size: 9px; letter-spacing: 0.15em; color: var(--text-faint);
+}
+.viz-wrap.active .vu { color: var(--amber-dim); }
+
+#waveform { width: 100%; height: 100%; display: block; }
+
+/* Controls row */
+.controls { display: flex; align-items: center; gap: 16px; }
+
+.rec-btn {
+  position: relative; flex-shrink: 0;
+  width: 54px; height: 54px; border-radius: 50%;
+  border: 2px solid var(--red); background: transparent; cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.rec-btn::before {
+  content: ''; position: absolute; top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  width: 20px; height: 20px; border-radius: 50%; background: var(--red);
+  transition: border-radius 0.25s, width 0.25s, height 0.25s, box-shadow 0.2s;
+}
+.rec-btn:hover { border-color: #DC2626; box-shadow: 0 0 22px var(--red-glow); }
+.rec-btn:hover::before { background: #DC2626; }
+.rec-btn.recording { animation: recRing 1.6s ease-in-out infinite; }
+.rec-btn.recording::before { border-radius: 4px; width: 16px; height: 16px; box-shadow: 0 0 14px rgba(185,28,28,0.7); }
+@keyframes recRing { 0%,100%{box-shadow:0 0 0 0 rgba(185,28,28,0.35)} 50%{box-shadow:0 0 0 14px rgba(185,28,28,0)} }
+
+.rec-info { flex: 1; min-width: 0; }
+.rec-label { font-size: 10px; letter-spacing: 0.22em; color: var(--text-dim); text-transform: uppercase; margin-bottom: 2px; }
+.rec-label.live { color: var(--red); animation: blink 1s step-end infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
+.rec-timer { font-family: var(--display); font-size: 36px; letter-spacing: 0.08em; line-height: 1; color: var(--text); }
+.rec-hint { font-size: 9px; color: var(--text-faint); letter-spacing: 0.12em; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Wake Word toggle */
+.wake-wrap { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.wake-btn {
+  width: 38px; height: 38px; border-radius: 50%;
+  border: 1px solid var(--border-hi); background: var(--surface);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s; color: var(--text-faint);
+}
+.wake-btn:hover { border-color: var(--text-dim); color: var(--text-dim); }
+.wake-btn.active {
+  border-color: #8AB020; background: #1A2008; color: #8AB020;
+  box-shadow: 0 0 14px rgba(138,176,32,0.2);
+  animation: wakePulse 2.5s ease-in-out infinite;
+}
+@keyframes wakePulse { 0%,100%{box-shadow:0 0 0 0 rgba(138,176,32,0.25)} 50%{box-shadow:0 0 0 8px rgba(138,176,32,0)} }
+.wake-label { font-size: 8px; letter-spacing: 0.15em; color: var(--text-faint); text-transform: uppercase; text-align: center; }
+.wake-btn.active + .wake-label { color: #6A8818; }
+
+/* Transcription */
+.section-label {
+  font-size: 9px; letter-spacing: 0.25em; color: var(--text-dim);
+  text-transform: uppercase; display: flex; align-items: center; gap: 10px;
+}
+.section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+.tx-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 2px; padding: 13px 15px;
+  min-height: 120px; max-height: 190px;
+  overflow-y: auto; flex-shrink: 0;
+}
+.tx-box::-webkit-scrollbar { width: 3px; }
+.tx-box::-webkit-scrollbar-thumb { background: var(--border-hi); }
+
+.tx-text {
+  font-size: 13px; font-weight: 300; font-style: italic;
+  line-height: 1.85; color: var(--text);
+  white-space: pre-wrap; word-break: break-word;
+}
+.tx-text:empty::before { content: 'Press the record button to begin…'; color: var(--text-faint); font-style: italic; font-weight: 300; }
+.cursor { display: inline-block; width: 6px; height: 13px; background: var(--amber); vertical-align: text-bottom; margin-left: 2px; animation: blink 0.85s step-end infinite; }
+
+.tx-actions { display: flex; gap: 10px; flex-shrink: 0; }
+
+/* Buttons */
+.btn { padding: 9px 18px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; cursor: pointer; border-radius: 1px; border: 1px solid; transition: all 0.15s; }
+.btn-primary { background: var(--amber); border-color: var(--amber); color: #0C0B09; font-weight: 500; }
+.btn-primary:hover { background: #F0B030; box-shadow: 0 0 20px var(--amber-glow); }
+.btn-primary:disabled { opacity: 0.28; cursor: not-allowed; box-shadow: none; }
+.btn-ghost { background: transparent; border-color: var(--border-hi); color: var(--text-dim); }
+.btn-ghost:hover { border-color: var(--text-dim); color: var(--text); }
+.btn-ghost:disabled { opacity: 0.28; cursor: not-allowed; }
+.btn-danger { background: transparent; border-color: #3A1A1A; color: #6A3030; }
+.btn-danger:hover { border-color: var(--red); color: var(--red); }
+.btn-sm { padding: 4px 10px; font-size: 9px; }
+
+/* ── iPHONE SETUP PANEL ─────────────── */
+.iphone-panel { border-top: 1px solid var(--border); flex-shrink: 0; }
+
+.iphone-summary {
+  list-style: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 11px 0;
+  font-size: 9px; letter-spacing: 0.25em; color: var(--text-dim); text-transform: uppercase;
+  user-select: none;
+}
+.iphone-summary::-webkit-details-marker { display: none; }
+.iphone-summary:hover { color: var(--text); }
+.iphone-summary .arrow { transition: transform 0.2s; color: var(--amber-dim); font-size: 10px; }
+.iphone-panel[open] .arrow { transform: rotate(90deg); }
+
+.iphone-body { padding-bottom: 4px; display: flex; flex-direction: column; gap: 12px; }
+
+.setup-tabs { display: flex; gap: 0; border: 1px solid var(--border); border-radius: 1px; overflow: hidden; }
+.setup-tab {
+  flex: 1; padding: 6px 0; font-family: var(--mono); font-size: 9px;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  cursor: pointer; border: none; background: transparent; color: var(--text-faint);
+  transition: all 0.15s; border-right: 1px solid var(--border);
+}
+.setup-tab:last-child { border-right: none; }
+.setup-tab:hover { color: var(--text-dim); background: var(--surface2); }
+.setup-tab.active { background: var(--surface2); color: var(--amber); }
+
+.setup-content { display: none; }
+.setup-content.active { display: block; }
+
+.setup-intro { font-size: 10px; color: var(--text-dim); line-height: 1.7; margin-bottom: 10px; }
+.setup-intro strong { color: var(--amber); font-weight: 500; }
+
+.steps { display: flex; flex-direction: column; gap: 7px; }
+.step { display: flex; gap: 10px; align-items: flex-start; }
+.step-n {
+  flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%;
+  border: 1px solid var(--border-hi); display: flex; align-items: center; justify-content: center;
+  font-size: 8px; color: var(--amber-dim); margin-top: 1px;
+}
+.step-text { font-size: 10px; color: var(--text-dim); line-height: 1.6; }
+.step-text code {
+  font-family: var(--mono); background: var(--surface2); border: 1px solid var(--border);
+  padding: 0px 5px; font-size: 9px; color: var(--amber); border-radius: 1px;
+  white-space: nowrap;
+}
+.setup-note {
+  font-size: 9px; color: var(--text-faint); line-height: 1.6;
+  border-left: 2px solid var(--border); padding-left: 8px; font-style: italic;
+}
+
+/* ── RIGHT PANEL ────────────────── */
+.memos-panel { display: flex; flex-direction: column; overflow: hidden; }
+.memos-header {
+  padding: 16px 24px 13px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+}
+.memos-title { font-family: var(--display); font-size: 22px; letter-spacing: 0.1em; color: var(--text-dim); }
+
+.memos-list { flex: 1; overflow-y: auto; }
+.memos-list::-webkit-scrollbar { width: 3px; }
+.memos-list::-webkit-scrollbar-thumb { background: var(--border-hi); }
+
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  height: 100%; gap: 14px; color: var(--text-faint);
+  font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+}
+.empty-state svg { opacity: 0.18; }
+
+.memo-item { padding: 13px 24px; border-bottom: 1px solid var(--border); cursor: default; transition: background 0.12s; animation: slideDown 0.25s ease; }
+@keyframes slideDown { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:translateY(0)} }
+.memo-item:hover { background: var(--surface2); }
+.memo-meta { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 5px; }
+.memo-idx { font-size: 9px; letter-spacing: 0.22em; color: var(--amber-dim); text-transform: uppercase; }
+.memo-date { font-size: 10px; color: var(--text-faint); }
+.memo-preview { font-size: 12px; font-style: italic; font-weight: 300; line-height: 1.65; color: var(--text-dim); margin-bottom: 10px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.memo-acts { display: flex; gap: 8px; opacity: 0; transition: opacity 0.15s; }
+.memo-item:hover .memo-acts { opacity: 1; }
+
+/* ── STATUS BAR ─────────────────── */
+.status-bar {
+  padding: 0 28px; display: flex; align-items: center; gap: 20px;
+  background: var(--surface); border-top: 1px solid var(--border);
+  font-size: 10px; color: var(--text-faint); letter-spacing: 0.12em;
+}
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); display: inline-block; margin-right: 6px; }
+.dot.on  { background: var(--green); box-shadow: 0 0 7px rgba(74,140,92,0.5); animation: pulse 2s infinite; }
+.dot.err { background: var(--red); }
+.dot.wake { background: #8AB020; box-shadow: 0 0 7px rgba(138,176,32,0.4); animation: pulse 3s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+/* ── TOAST ──────────────────────── */
+.toast {
+  position: fixed; bottom: 20px; right: 20px;
+  background: var(--surface); border: 1px solid var(--border-hi);
+  border-left: 3px solid var(--amber);
+  padding: 10px 18px; font-size: 11px; letter-spacing: 0.1em; color: var(--text);
+  animation: toastIn 0.2s ease, toastOut 0.3s ease 2.7s forwards; z-index: 200;
+}
+@keyframes toastIn  { from{transform:translateX(16px);opacity:0} to{transform:translateX(0);opacity:1} }
+@keyframes toastOut { to{transform:translateX(10px);opacity:0} }
+
+/* Wake word triggered flash */
+.wake-flash {
+  position: fixed; inset: 0; background: rgba(138,176,32,0.06);
+  pointer-events: none; z-index: 100;
+  animation: wakeFlash 0.5s ease forwards;
+}
+@keyframes wakeFlash { 0%{opacity:1} 100%{opacity:0} }
+
+/* ── RESPONSIVE ─────────────────── */
+@media (max-width: 700px) {
+  main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+  .recorder-panel { border-right: none; border-bottom: 1px solid var(--border); max-height: 60vh; }
+  .app { grid-template-rows: 56px auto 1fr 34px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="logo">VOICE MEMO<span class="logo-sub">Rec · Transcribe</span></div>
+    <div class="memo-count"><strong id="memoCount">0</strong> RECORDINGS</div>
+  </header>
+
+  <main>
+
+    <!-- ── LEFT: RECORDER ── -->
+    <div class="recorder-panel">
+
+      <div class="viz-wrap" id="vizWrap">
+        <span class="viz-label" id="vizLabel">AUDIO INPUT</span>
+        <span class="vu" id="vuMeter">–∞ dB</span>
+        <canvas id="waveform"></canvas>
+      </div>
+
+      <div class="controls">
+        <button class="rec-btn" id="recBtn" title="Record / Stop"></button>
+
+        <div class="rec-info">
+          <div class="rec-label" id="recLabel">READY</div>
+          <div class="rec-timer" id="recTimer">00:00</div>
+          <div class="rec-hint" id="recHint">CLICK TO BEGIN RECORDING</div>
+        </div>
+
+        <!-- Wake Word toggle -->
+        <div class="wake-wrap" id="wakeWrap" title='Say "Transcript" to auto-start recording'>
+          <button class="wake-btn" id="wakeBtn">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/>
+            </svg>
+          </button>
+          <span class="wake-label" id="wakeLabel">TRANSCRIPT</span>
+        </div>
+      </div>
+
+      <div class="section-label">Live Transcription</div>
+
+      <div class="tx-box">
+        <div class="tx-text" id="txText"></div>
+      </div>
+
+      <div class="tx-actions">
+        <button class="btn btn-primary" id="saveBtn" disabled>SAVE MEMO</button>
+        <button class="btn btn-ghost"   id="clearBtn" disabled>CLEAR</button>
+      </div>
+
+      <!-- iPhone Setup -->
+      <details class="iphone-panel" id="iphonePanel">
+        <summary class="iphone-summary">
+          <span>USE ON IPHONE &amp; BLUETOOTH MIC</span>
+          <span class="arrow">▸</span>
+        </summary>
+        <div class="iphone-body">
+
+          <div class="setup-tabs">
+            <button class="setup-tab active" data-tab="shortcut">SIRI SHORTCUT</button>
+            <button class="setup-tab" data-tab="standalone">STANDALONE</button>
+          </div>
+
+          <!-- Tab: Siri Shortcut -->
+          <div class="setup-content active" id="tab-shortcut">
+            <p class="setup-intro">Opens this app from Siri. Say <strong>"Hey Siri, Transcript"</strong> — recording starts automatically. Works with AirPods or any Bluetooth mic.</p>
+            <div class="steps">
+              <div class="step"><div class="step-n">1</div><div class="step-text">Host this file on <strong>GitHub Pages</strong>, Netlify, or any web server — note the URL.</div></div>
+              <div class="step"><div class="step-n">2</div><div class="step-text">On iPhone, open the <strong>Shortcuts</strong> app → tap <code>+</code> to create a new shortcut.</div></div>
+              <div class="step"><div class="step-n">3</div><div class="step-text">Tap the shortcut name at the top → rename it <code>Transcript</code>.</div></div>
+              <div class="step"><div class="step-n">4</div><div class="step-text">Tap <strong>Add Action</strong> → search <code>Open URLs</code> → select it.</div></div>
+              <div class="step"><div class="step-n">5</div><div class="step-text">Set the URL to <code>https://your-url?autostart=1</code></div></div>
+              <div class="step"><div class="step-n">6</div><div class="step-text">Tap <strong>Done</strong>. Now say <strong>"Hey Siri, Transcript"</strong> — the app opens and starts recording immediately.</div></div>
+            </div>
+            <p class="setup-note" style="margin-top:10px">On desktop (Chrome/Edge), use the <strong>wake word button</strong> above instead — no Siri needed.</p>
+          </div>
+
+          <!-- Tab: Standalone -->
+          <div class="setup-content" id="tab-standalone">
+            <p class="setup-intro">No web hosting needed. Creates a <strong>standalone Siri Shortcut</strong> that records, transcribes, and saves directly to iCloud Drive as a .txt file.</p>
+            <div class="steps">
+              <div class="step"><div class="step-n">1</div><div class="step-text">Open <strong>Shortcuts</strong> → tap <code>+</code> → name it <code>Transcript</code>.</div></div>
+              <div class="step"><div class="step-n">2</div><div class="step-text">Add action: <code>Dictate Text</code> — set Language to <strong>English</strong>, stops on: <strong>Silence</strong>.</div></div>
+              <div class="step"><div class="step-n">3</div><div class="step-text">Add action: <code>Format Date</code> — choose <strong>Custom</strong>, format: <code>MMM d yyyy, h:mm a</code>.</div></div>
+              <div class="step"><div class="step-n">4</div><div class="step-text">Add action: <code>Text</code> — enter: <code>[Dictated Text]↵— [Formatted Date]↵↵</code> (use variable chips).</div></div>
+              <div class="step"><div class="step-n">5</div><div class="step-text">Add action: <code>Get File</code> → iCloud Drive → <code>Voice Memos.txt</code>. Enable <strong>Error If Not Found: OFF</strong>.</div></div>
+              <div class="step"><div class="step-n">6</div><div class="step-text">Add action: <code>Combine Text</code> → combine [File Contents] + [Text from step 4], separator: <strong>New Lines</strong>.</div></div>
+              <div class="step"><div class="step-n">7</div><div class="step-text">Add action: <code>Save File</code> → iCloud Drive → filename <code>Voice Memos.txt</code>, <strong>Overwrite: ON</strong>.</div></div>
+              <div class="step"><div class="step-n">8</div><div class="step-text">Tap <strong>Done</strong>. Say <strong>"Hey Siri, Transcript"</strong> — iPhone records, transcribes, and appends to your file.</div></div>
+            </div>
+            <p class="setup-note" style="margin-top:10px">Your memos accumulate in <strong>iCloud Drive → Voice Memos.txt</strong>, visible in the Files app on all devices.</p>
+          </div>
+
+        </div>
+      </details>
+
+    </div>
+
+    <!-- ── RIGHT: MEMOS ── -->
+    <div class="memos-panel">
+      <div class="memos-header">
+        <div class="memos-title">RECORDINGS</div>
+        <button class="btn btn-ghost btn-sm" id="exportAllBtn">EXPORT ALL ↓</button>
+      </div>
+      <div class="memos-list" id="memosList">
+        <div class="empty-state" id="emptyState">
+          <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
+            <circle cx="22" cy="22" r="20" stroke="currentColor" stroke-width="1.5"/>
+            <circle cx="22" cy="22" r="7" fill="currentColor" opacity="0.4"/>
+            <path d="M22 4V9M22 35V40M4 22H9M35 22H40" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <span>No recordings yet</span>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <div class="status-bar">
+    <span><span class="dot" id="statusDot"></span><span id="statusText">IDLE</span></span>
+    <span id="browserNote"></span>
+  </div>
+</div>
+
+<script>
+// ── STATE ─────────────────────────────────────────────────────────────────────
+const S = {
+  recording:   false,
+  wakeMode:    false,
+  finalTx:     '',
+  interimTx:   '',
+  memos:       JSON.parse(localStorage.getItem('voiceMemos') || '[]'),
+  seconds:     0,
+  timerID:     null,
+  recognition: null,
+  wakeRec:     null,
+  audioCtx:    null,
+  analyser:    null,
+  stream:      null,
+  raf:         null,
+  idlePhase:   0,
+};
+
+// ── DOM ───────────────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const recBtn      = $('recBtn');
+const recLabel    = $('recLabel');
+const recTimer    = $('recTimer');
+const recHint     = $('recHint');
+const txText      = $('txText');
+const saveBtn     = $('saveBtn');
+const clearBtn    = $('clearBtn');
+const memosList   = $('memosList');
+const emptyState  = $('emptyState');
+const memoCount   = $('memoCount');
+const exportAllBtn= $('exportAllBtn');
+const vizWrap     = $('vizWrap');
+const vizLabel    = $('vizLabel');
+const vuMeter     = $('vuMeter');
+const canvas      = $('waveform');
+const cx          = canvas.getContext('2d');
+const statusDot   = $('statusDot');
+const statusText  = $('statusText');
+const browserNote = $('browserNote');
+const wakeBtn     = $('wakeBtn');
+const wakeLabel   = $('wakeLabel');
+
+// ── SPEECH API ────────────────────────────────────────────────────────────────
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+if (!SR) {
+  browserNote.textContent = '⚠ Speech recognition unavailable — use Chrome or Edge';
+  recBtn.disabled = wakeBtn.disabled = true;
+  setStatus('err', 'UNSUPPORTED BROWSER');
+} else if (isIOS) {
+  browserNote.textContent = '📱 iPhone detected — see setup panel below';
+  setStatus('', 'IDLE');
+} else {
+  browserNote.textContent = 'Tip: click ◎ to listen for "Transcript" wake word';
+  setStatus('', 'IDLE');
+}
+
+// ── CANVAS ────────────────────────────────────────────────────────────────────
+function resizeCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width  = canvas.offsetWidth  * dpr;
+  canvas.height = canvas.offsetHeight * dpr;
+  cx.scale(dpr, dpr);
+}
+resizeCanvas();
+window.addEventListener('resize', () => { resizeCanvas(); if (!S.recording) drawIdle(); });
+drawIdle();
+renderMemos();
+
+// ── AUTO-OPEN iPHONE PANEL ────────────────────────────────────────────────────
+if (isIOS) $('iphonePanel').setAttribute('open', '');
+
+// ── AUTOSTART (from URL param ?autostart=1) ───────────────────────────────────
+if (new URLSearchParams(location.search).get('autostart') === '1') {
+  setTimeout(() => recBtn.click(), 900);
+}
+
+// ── WAKE WORD TOGGLE ──────────────────────────────────────────────────────────
+wakeBtn.addEventListener('click', () => {
+  if (!SR) return;
+  S.wakeMode ? stopWake() : startWake();
+});
+
+function startWake() {
+  if (S.recording) return;
+  S.wakeMode = true;
+  wakeBtn.classList.add('active');
+  wakeLabel.textContent = 'LISTENING';
+  vizWrap.classList.add('wake-on');
+  vizLabel.textContent = 'LISTENING FOR "TRANSCRIPT"';
+  setStatus('wake', 'WAKE WORD ACTIVE');
+  browserNote.textContent = 'Say "Transcript" to start recording';
+  drawScan();
+
+  S.wakeRec = new SR();
+  S.wakeRec.continuous     = true;
+  S.wakeRec.interimResults = true;
+  S.wakeRec.lang           = 'en-US';
+
+  S.wakeRec.onresult = e => {
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i].transcript.toLowerCase().replace(/[^a-z\s]/g,'');
+      if (t.includes('transcript')) {
+        triggerFromWake();
+        break;
+      }
+    }
+  };
+
+  S.wakeRec.onerror = ev => {
+    if (ev.error === 'not-allowed') { stopWake(); toast('Mic permission denied'); }
+  };
+
+  // Keep alive — restart after each session
+  S.wakeRec.onend = () => {
+    if (S.wakeMode && !S.recording) {
+      setTimeout(() => { try { S.wakeRec.start(); } catch(_) {} }, 300);
+    }
+  };
+
+  try { S.wakeRec.start(); } catch(e) {}
+}
+
+function stopWake() {
+  S.wakeMode = false;
+  wakeBtn.classList.remove('active');
+  wakeLabel.textContent = 'TRANSCRIPT';
+  vizWrap.classList.remove('wake-on');
+  vizLabel.textContent = 'AUDIO INPUT';
+  setStatus('', 'IDLE');
+  browserNote.textContent = SR ? 'Tip: click ◎ to listen for "Transcript" wake word' : '';
+  cancelAnimationFrame(S.raf);
+  drawIdle();
+  if (S.wakeRec) { try { S.wakeRec.stop(); } catch(_) {} S.wakeRec = null; }
+}
+
+function triggerFromWake() {
+  // Flash feedback
+  const flash = document.createElement('div');
+  flash.className = 'wake-flash';
+  document.body.appendChild(flash);
+  setTimeout(() => flash.remove(), 600);
+
+  // Stop wake listener, start real recording
+  if (S.wakeRec) { try { S.wakeRec.abort(); } catch(_) {} S.wakeRec = null; }
+  toast('Wake word detected — recording started');
+  startRec();
+}
+
+// ── RECORD ────────────────────────────────────────────────────────────────────
+recBtn.addEventListener('click', () => S.recording ? stopRec() : startRec());
+
+async function startRec() {
+  if (!SR || S.recording) return;
+
+  // Pause wake mode during recording
+  if (S.wakeMode && S.wakeRec) {
+    try { S.wakeRec.abort(); } catch(_) {}
+    S.wakeRec = null;
+  }
+
+  // Mic → analyser for live waveform
+  try {
+    S.stream   = await navigator.mediaDevices.getUserMedia({ audio: true });
+    S.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    S.analyser = S.audioCtx.createAnalyser();
+    S.analyser.fftSize = 256;
+    S.audioCtx.createMediaStreamSource(S.stream).connect(S.analyser);
+  } catch(e) {
+    console.warn('Mic access denied, visualizer off:', e);
+  }
+
+  // Speech recognition
+  S.recognition = new SR();
+  S.recognition.continuous     = true;
+  S.recognition.interimResults = true;
+  S.recognition.lang           = 'en-US';
+
+  S.recognition.onresult = e => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i].transcript;
+      e.results[i].isFinal ? (S.finalTx += t + ' ') : (interim = t);
+    }
+    S.interimTx = interim;
+    renderTx();
+  };
+
+  S.recognition.onerror = e => {
+    if (e.error !== 'no-speech') setStatus('err', 'ERR: ' + e.error.toUpperCase());
+  };
+
+  S.recognition.onend = () => {
+    if (S.recording) try { S.recognition.start(); } catch(_) {}
+  };
+
+  S.recognition.start();
+
+  S.recording = true; S.seconds = 0;
+  recBtn.classList.add('recording');
+  vizWrap.classList.remove('wake-on');
+  vizWrap.classList.add('active');
+  vizLabel.textContent = 'AUDIO INPUT';
+  recLabel.textContent = '● REC'; recLabel.classList.add('live');
+  recHint.textContent  = 'CLICK TO STOP';
+  setStatus('on', 'RECORDING');
+
+  S.timerID = setInterval(() => { S.seconds++; recTimer.textContent = fmt(S.seconds); }, 1000);
+  S.analyser ? drawLive() : drawFakeWave();
+}
+
+function stopRec() {
+  S.recording = false;
+
+  if (S.recognition) { S.recognition.stop(); S.recognition = null; }
+  if (S.stream)      { S.stream.getTracks().forEach(t => t.stop()); S.stream = null; }
+  if (S.audioCtx)    { S.audioCtx.close(); S.audioCtx = null; S.analyser = null; }
+
+  clearInterval(S.timerID);
+  cancelAnimationFrame(S.raf);
+
+  recBtn.classList.remove('recording');
+  vizWrap.classList.remove('active');
+  recLabel.textContent = 'STOPPED'; recLabel.classList.remove('live');
+  recHint.textContent  = 'CLICK TO BEGIN RECORDING';
+  vuMeter.textContent  = '–∞ dB';
+
+  const hasText = S.finalTx.trim().length > 0;
+  saveBtn.disabled  = !hasText;
+  clearBtn.disabled = !hasText;
+  if (!hasText && !S.interimTx.trim()) renderTx();
+
+  // Resume wake mode after recording stops
+  if (S.wakeMode) {
+    setStatus('wake', 'WAKE WORD ACTIVE');
+    vizWrap.classList.add('wake-on');
+    vizLabel.textContent = 'LISTENING FOR "TRANSCRIPT"';
+    drawScan();
+    setTimeout(() => {
+      S.wakeRec = new SR();
+      S.wakeRec.continuous = true; S.wakeRec.interimResults = true; S.wakeRec.lang = 'en-US';
+      S.wakeRec.onresult = e => {
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const t = e.results[i].transcript.toLowerCase().replace(/[^a-z\s]/g,'');
+          if (t.includes('transcript')) { triggerFromWake(); break; }
+        }
+      };
+      S.wakeRec.onend = () => {
+        if (S.wakeMode && !S.recording) setTimeout(() => { try { S.wakeRec.start(); } catch(_) {} }, 300);
+      };
+      try { S.wakeRec.start(); } catch(_) {}
+    }, 600);
+  } else {
+    setStatus('', 'IDLE');
+    drawIdle();
+  }
+}
+
+// ── TRANSCRIPTION ─────────────────────────────────────────────────────────────
+function renderTx() {
+  const f = S.finalTx, i = S.interimTx;
+  if (f || i) {
+    txText.innerHTML =
+      esc(f) +
+      (i ? `<span style="color:var(--text-faint)">${esc(i)}</span>` : '') +
+      '<span class="cursor"></span>';
+    clearBtn.disabled = false;
+    saveBtn.disabled  = !f.trim();
+  } else {
+    txText.innerHTML = '';
+  }
+}
+
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+}
+
+// ── SAVE / CLEAR ──────────────────────────────────────────────────────────────
+saveBtn.addEventListener('click', () => {
+  const text = S.finalTx.trim();
+  if (!text) return;
+  const memo = { id: Date.now(), text, duration: S.seconds, date: new Date().toISOString() };
+  S.memos.unshift(memo); persist();
+  S.finalTx = ''; S.interimTx = ''; S.seconds = 0;
+  recTimer.textContent = '00:00';
+  renderTx(); saveBtn.disabled = clearBtn.disabled = true;
+  renderMemos(); toast('Memo saved');
+});
+
+clearBtn.addEventListener('click', () => {
+  S.finalTx = ''; S.interimTx = '';
+  renderTx(); saveBtn.disabled = clearBtn.disabled = true;
+});
+
+// ── MEMOS ─────────────────────────────────────────────────────────────────────
+function renderMemos() {
+  memoCount.textContent = S.memos.length;
+  if (!S.memos.length) {
+    memosList.innerHTML = '';
+    memosList.appendChild(emptyState);
+    emptyState.style.display = 'flex'; return;
+  }
+  emptyState.style.display = 'none';
+  memosList.innerHTML = S.memos.map((m, idx) => {
+    const d  = new Date(m.date);
+    const ds = d.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' ' +
+               d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+    const n  = S.memos.length - idx;
+    return `<div class="memo-item">
+      <div class="memo-meta">
+        <span class="memo-idx">MEMO ${String(n).padStart(2,'0')}</span>
+        <span class="memo-date">${ds}${m.duration ? ' · ' + fmt(m.duration) : ''}</span>
+      </div>
+      <div class="memo-preview">${esc(m.text)}</div>
+      <div class="memo-acts">
+        <button class="btn btn-ghost btn-sm" onclick="dlMemo(${m.id})">EXPORT ↓</button>
+        <button class="btn btn-danger btn-sm" onclick="delMemo(${m.id})">DELETE</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function delMemo(id) {
+  S.memos = S.memos.filter(m => m.id !== id);
+  persist(); renderMemos(); toast('Memo deleted');
+}
+
+function dlMemo(id) {
+  const m = S.memos.find(m => m.id === id); if (!m) return;
+  dl(`VOICE MEMO\n${'─'.repeat(40)}\nDate:     ${new Date(m.date).toLocaleString()}\n${m.duration?'Duration: '+fmt(m.duration)+'\n':''}${'─'.repeat(40)}\n\n${m.text}\n`,
+    `memo-${new Date(m.date).toISOString().slice(0,10)}.txt`);
+}
+
+exportAllBtn.addEventListener('click', () => {
+  if (!S.memos.length) { toast('No memos to export'); return; }
+  const body = S.memos.map((m,i) => {
+    const n = S.memos.length - i;
+    return `MEMO ${String(n).padStart(2,'0')}\n${'─'.repeat(40)}\nDate: ${new Date(m.date).toLocaleString()}${m.duration?'\nDuration: '+fmt(m.duration):''}\n\n${m.text}`;
+  }).join('\n\n'+'═'.repeat(40)+'\n\n');
+  dl(`VOICE MEMO EXPORT — ${S.memos.length} recording${S.memos.length!==1?'s':''}\n${'═'.repeat(40)}\n\n`+body, 'voice-memos.txt');
+  toast(`Exported ${S.memos.length} memo${S.memos.length!==1?'s':''}`);
+});
+
+// ── SETUP TABS ────────────────────────────────────────────────────────────────
+document.querySelectorAll('.setup-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.setup-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.setup-content').forEach(c => c.classList.remove('active'));
+    tab.classList.add('active');
+    $('tab-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+// ── WAVEFORM ──────────────────────────────────────────────────────────────────
+function drawLive() {
+  if (!S.analyser || !S.recording) return;
+  S.raf = requestAnimationFrame(drawLive);
+  const W = canvas.offsetWidth, H = canvas.offsetHeight;
+  const buf = new Uint8Array(S.analyser.frequencyBinCount);
+  S.analyser.getByteFrequencyData(buf);
+  cx.clearRect(0, 0, W, H);
+  const N = 56, bw = (W/N)*0.55, gap = (W/N)*0.45;
+  let sum = 0;
+  for (let i = 0; i < N; i++) {
+    const v = buf[Math.floor(i*buf.length/N)] / 255; sum += v;
+    const bh = Math.max(2, v*H*0.82), x = i*(bw+gap)+gap/2, y = (H-bh)/2;
+    cx.fillStyle = `rgba(232,160,32,${0.35+v*0.65})`;
+    cx.fillRect(x, y, bw, bh);
+  }
+  const db = sum/N > 0.001 ? Math.round(20*Math.log10(sum/N)) : -Infinity;
+  vuMeter.textContent = isFinite(db) ? `${db} dB` : '–∞ dB';
+}
+
+function drawFakeWave() {
+  if (!S.recording) return;
+  S.raf = requestAnimationFrame(drawFakeWave);
+  S.idlePhase += 0.06;
+  const W = canvas.offsetWidth, H = canvas.offsetHeight;
+  cx.clearRect(0, 0, W, H);
+  const N = 56, bw = (W/N)*0.55, gap = (W/N)*0.45;
+  for (let i = 0; i < N; i++) {
+    const v = (Math.sin(i*0.35+S.idlePhase)*0.35+0.38)*0.5;
+    const bh = Math.max(2, v*H*0.7), x = i*(bw+gap)+gap/2, y = (H-bh)/2;
+    cx.fillStyle = `rgba(232,160,32,${0.2+v*0.5})`;
+    cx.fillRect(x, y, bw, bh);
+  }
+}
+
+function drawIdle() {
+  const W = canvas.offsetWidth, H = canvas.offsetHeight;
+  cx.clearRect(0, 0, W, H);
+  const N = 56, bw = (W/N)*0.55, gap = (W/N)*0.45;
+  for (let i = 0; i < N; i++) {
+    cx.fillStyle = 'rgba(232,160,32,0.10)';
+    cx.fillRect(i*(bw+gap)+gap/2, H/2-1, bw, 2);
+  }
+}
+
+let scanPhase = 0;
+function drawScan() {
+  if (!S.wakeMode || S.recording) return;
+  S.raf = requestAnimationFrame(drawScan);
+  scanPhase += 0.025;
+  const W = canvas.offsetWidth, H = canvas.offsetHeight;
+  cx.clearRect(0, 0, W, H);
+  const N = 56, bw = (W/N)*0.55, gap = (W/N)*0.45;
+  for (let i = 0; i < N; i++) {
+    const wave = Math.sin(i*0.18 + scanPhase) * 0.5 + 0.5;
+    const v    = wave * 0.22;
+    const bh   = Math.max(1.5, v*H);
+    cx.fillStyle = `rgba(138,176,32,${0.15 + wave*0.25})`;
+    cx.fillRect(i*(bw+gap)+gap/2, (H-bh)/2, bw, bh);
+  }
+}
+
+// ── UTILS ─────────────────────────────────────────────────────────────────────
+function fmt(s) { return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; }
+
+function setStatus(type, text) {
+  statusDot.className = 'dot' + (type==='on'?' on':type==='err'?' err':type==='wake'?' wake':'');
+  statusText.textContent = text;
+}
+
+function persist() { localStorage.setItem('voiceMemos', JSON.stringify(S.memos)); }
+
+function dl(content, filename) {
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([content], {type:'text/plain;charset=utf-8'})),
+    download: filename,
+  });
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+function toast(msg) {
+  document.querySelector('.toast')?.remove();
+  const t = document.createElement('div');
+  t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+</script>
+</body>
+</html>
