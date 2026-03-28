@@ -325,14 +325,14 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
         </div>
 
         <!-- Wake Word toggle -->
-        <div class="wake-wrap" id="wakeWrap" title='Say "Transcript" to auto-start recording'>
+        <div class="wake-wrap" id="wakeWrap" title='Say "Record" to auto-start recording'>
           <button class="wake-btn" id="wakeBtn">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
               <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
               <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v4M8 23h8"/>
             </svg>
           </button>
-          <span class="wake-label" id="wakeLabel">TRANSCRIPT</span>
+          <span class="wake-label" id="wakeLabel">RECORD</span>
         </div>
       </div>
 
@@ -362,14 +362,14 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
           <!-- Tab: Siri Shortcut -->
           <div class="setup-content active" id="tab-shortcut">
-            <p class="setup-intro">Opens this app from Siri. Say <strong>"Hey Siri, Transcript"</strong> — recording starts automatically. Works with AirPods or any Bluetooth mic.</p>
+            <p class="setup-intro">Opens this app from Siri. Say <strong>"Hey Siri, Record"</strong> — recording starts automatically. Works with AirPods or any Bluetooth mic.</p>
             <div class="steps">
               <div class="step"><div class="step-n">1</div><div class="step-text">Host this file on <strong>GitHub Pages</strong>, Netlify, or any web server — note the URL.</div></div>
               <div class="step"><div class="step-n">2</div><div class="step-text">On iPhone, open the <strong>Shortcuts</strong> app → tap <code>+</code> to create a new shortcut.</div></div>
-              <div class="step"><div class="step-n">3</div><div class="step-text">Tap the shortcut name at the top → rename it <code>Transcript</code>.</div></div>
+              <div class="step"><div class="step-n">3</div><div class="step-text">Tap the shortcut name at the top → rename it <code>Record</code>.</div></div>
               <div class="step"><div class="step-n">4</div><div class="step-text">Tap <strong>Add Action</strong> → search <code>Open URLs</code> → select it.</div></div>
               <div class="step"><div class="step-n">5</div><div class="step-text">Set the URL to <code>https://avitheret.github.io/voice-memo/?autostart=1</code></div></div>
-              <div class="step"><div class="step-n">6</div><div class="step-text">Tap <strong>Done</strong>. Now say <strong>"Hey Siri, Transcript"</strong> — the app opens and starts recording immediately.</div></div>
+              <div class="step"><div class="step-n">6</div><div class="step-text">Tap <strong>Done</strong>. Now say <strong>"Hey Siri, Record"</strong> — the app opens and starts recording immediately.</div></div>
             </div>
             <p class="setup-note" style="margin-top:10px">On desktop (Chrome/Edge), use the <strong>wake word button</strong> above instead — no Siri needed.</p>
           </div>
@@ -378,14 +378,14 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
           <div class="setup-content" id="tab-standalone">
             <p class="setup-intro">No web hosting needed. Creates a <strong>standalone Siri Shortcut</strong> that records, transcribes, and saves directly to iCloud Drive as a .txt file.</p>
             <div class="steps">
-              <div class="step"><div class="step-n">1</div><div class="step-text">Open <strong>Shortcuts</strong> → tap <code>+</code> → name it <code>Transcript</code>.</div></div>
+              <div class="step"><div class="step-n">1</div><div class="step-text">Open <strong>Shortcuts</strong> → tap <code>+</code> → name it <code>Record</code>.</div></div>
               <div class="step"><div class="step-n">2</div><div class="step-text">Add action: <code>Dictate Text</code> — set Language to <strong>English</strong>, stops on: <strong>Silence</strong>.</div></div>
               <div class="step"><div class="step-n">3</div><div class="step-text">Add action: <code>Format Date</code> — choose <strong>Custom</strong>, format: <code>MMM d yyyy, h:mm a</code>.</div></div>
               <div class="step"><div class="step-n">4</div><div class="step-text">Add action: <code>Text</code> — enter: <code>[Dictated Text]↵— [Formatted Date]↵↵</code> (use variable chips).</div></div>
               <div class="step"><div class="step-n">5</div><div class="step-text">Add action: <code>Get File</code> → iCloud Drive → <code>Voice Memos.txt</code>. Enable <strong>Error If Not Found: OFF</strong>.</div></div>
               <div class="step"><div class="step-n">6</div><div class="step-text">Add action: <code>Combine Text</code> → combine [File Contents] + [Text from step 4], separator: <strong>New Lines</strong>.</div></div>
               <div class="step"><div class="step-n">7</div><div class="step-text">Add action: <code>Save File</code> → iCloud Drive → filename <code>Voice Memos.txt</code>, <strong>Overwrite: ON</strong>.</div></div>
-              <div class="step"><div class="step-n">8</div><div class="step-text">Tap <strong>Done</strong>. Say <strong>"Hey Siri, Transcript"</strong> — iPhone records, transcribes, and appends to your file.</div></div>
+              <div class="step"><div class="step-n">8</div><div class="step-text">Tap <strong>Done</strong>. Say <strong>"Hey Siri, Record"</strong> — iPhone records, transcribes, and appends to your file.</div></div>
             </div>
             <p class="setup-note" style="margin-top:10px">Your memos accumulate in <strong>iCloud Drive → Voice Memos.txt</strong>, visible in the Files app on all devices.</p>
           </div>
@@ -476,7 +476,7 @@ if (!SR) {
   browserNote.textContent = '📱 iPhone detected — see setup panel below';
   setStatus('', 'IDLE');
 } else {
-  browserNote.textContent = 'Tip: click ◎ to listen for "Transcript" wake word';
+  browserNote.textContent = 'Tip: click ◎ to listen for "Record" wake word';
   setStatus('', 'IDLE');
 }
 
@@ -512,9 +512,9 @@ function startWake() {
   wakeBtn.classList.add('active');
   wakeLabel.textContent = 'LISTENING';
   vizWrap.classList.add('wake-on');
-  vizLabel.textContent = 'LISTENING FOR "TRANSCRIPT"';
+  vizLabel.textContent = 'LISTENING FOR "RECORD"';
   setStatus('wake', 'WAKE WORD ACTIVE');
-  browserNote.textContent = 'Say "Transcript" to start recording';
+  browserNote.textContent = 'Say "Record" to start recording';
   drawScan();
 
   S.wakeRec = new SR();
@@ -525,7 +525,7 @@ function startWake() {
   S.wakeRec.onresult = e => {
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const t = e.results[i].transcript.toLowerCase().replace(/[^a-z\s]/g,'');
-      if (t.includes('transcript')) {
+      if (t.includes('record')) {
         triggerFromWake();
         break;
       }
@@ -549,11 +549,11 @@ function startWake() {
 function stopWake() {
   S.wakeMode = false;
   wakeBtn.classList.remove('active');
-  wakeLabel.textContent = 'TRANSCRIPT';
+  wakeLabel.textContent = 'RECORD';
   vizWrap.classList.remove('wake-on');
   vizLabel.textContent = 'AUDIO INPUT';
   setStatus('', 'IDLE');
-  browserNote.textContent = SR ? 'Tip: click ◎ to listen for "Transcript" wake word' : '';
+  browserNote.textContent = SR ? 'Tip: click ◎ to listen for "Record" wake word' : '';
   cancelAnimationFrame(S.raf);
   drawIdle();
   if (S.wakeRec) { try { S.wakeRec.stop(); } catch(_) {} S.wakeRec = null; }
@@ -659,7 +659,7 @@ function stopRec() {
   if (S.wakeMode) {
     setStatus('wake', 'WAKE WORD ACTIVE');
     vizWrap.classList.add('wake-on');
-    vizLabel.textContent = 'LISTENING FOR "TRANSCRIPT"';
+    vizLabel.textContent = 'LISTENING FOR "RECORD"';
     drawScan();
     setTimeout(() => {
       S.wakeRec = new SR();
@@ -667,7 +667,7 @@ function stopRec() {
       S.wakeRec.onresult = e => {
         for (let i = e.resultIndex; i < e.results.length; i++) {
           const t = e.results[i].transcript.toLowerCase().replace(/[^a-z\s]/g,'');
-          if (t.includes('transcript')) { triggerFromWake(); break; }
+          if (t.includes('record')) { triggerFromWake(); break; }
         }
       };
       S.wakeRec.onend = () => {
