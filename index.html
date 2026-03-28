@@ -297,6 +297,51 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 }
 @keyframes wakeFlash { 0%{opacity:1} 100%{opacity:0} }
 
+
+/* ── SYNC BAR ───────────────────────── */
+.sync-bar {
+  padding: 7px 24px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px;
+  background: var(--surface2); flex-shrink: 0;
+}
+.sync-lbl { font-size: 8px; letter-spacing: 0.22em; color: var(--text-faint); white-space: nowrap; }
+.sync-code {
+  font-size: 11px; letter-spacing: 0.25em; color: var(--amber);
+  cursor: pointer; border: none; background: none; font-family: var(--mono);
+  padding: 0;
+}
+.sync-code:hover { color: #F0B030; }
+.sync-sep { color: var(--text-faint); font-size: 10px; }
+.sync-edit {
+  font-size: 9px; color: var(--text-faint); background: none; border: none;
+  cursor: pointer; font-family: var(--mono); padding: 0; letter-spacing: 0.1em;
+}
+.sync-edit:hover { color: var(--text-dim); }
+.sync-status { margin-left: auto; font-size: 9px; letter-spacing: 0.12em; color: var(--text-faint); white-space: nowrap; }
+.sync-status.syncing { color: var(--amber-dim); }
+.sync-status.synced  { color: #4A8C5C; }
+.sync-status.error   { color: var(--red); }
+
+/* ── SYNC CODE MODAL ─────────────────── */
+.sync-modal-bg {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+  display: flex; align-items: center; justify-content: center; z-index: 300;
+}
+.sync-modal {
+  background: var(--surface); border: 1px solid var(--border-hi);
+  padding: 24px 28px; min-width: 280px; max-width: 340px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.sync-modal-title { font-family: var(--display); font-size: 20px; letter-spacing: 0.1em; color: var(--amber); }
+.sync-modal p { font-size: 11px; color: var(--text-dim); line-height: 1.7; }
+.sync-modal-input {
+  font-family: var(--mono); font-size: 15px; letter-spacing: 0.3em;
+  background: var(--surface2); border: 1px solid var(--border-hi);
+  color: var(--text); padding: 10px 12px; text-transform: uppercase; width: 100%;
+}
+.sync-modal-input::placeholder { color: var(--text-faint); text-transform: none; letter-spacing: 0.1em; }
+.sync-modal-row { display: flex; gap: 10px; }
+
 /* ── RESPONSIVE ─────────────────── */
 @media (max-width: 700px) {
   main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
@@ -415,6 +460,13 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
         <div class="memos-title">RECORDINGS</div>
         <button class="btn btn-ghost btn-sm" id="exportAllBtn">EXPORT ALL ↓</button>
       </div>
+      <div class="sync-bar">
+        <span class="sync-lbl">SYNC</span>
+        <button class="sync-code" id="syncCodeBtn" title="Click to copy sync code">????????</button>
+        <span class="sync-sep">·</span>
+        <button class="sync-edit" id="syncEditBtn" title="Enter code from another device">CHANGE</button>
+        <span class="sync-status" id="syncStatusEl">–</span>
+      </div>
       <div class="memos-list" id="memosList">
         <div class="empty-state" id="emptyState">
           <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
@@ -437,7 +489,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 1, minor: 5 };
+const VERSION = { major: 1, minor: 6 };
 const SILENCE_MS = 5000;   // auto-stop after 5 s of silence
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
@@ -456,7 +508,9 @@ const S = {
   stream:       null,
   raf:          null,
   idlePhase:    0,
-  silenceTimer: null,
+  silenceTimer:  null,
+  wakeCooldown:  false,
+  syncCode:      localStorage.getItem('vmSyncCode') || genSyncCode(),
 };
 
 // ── DOM ───────────────────────────────────────────────────────────────────────
@@ -540,7 +594,7 @@ function makeWakeRec() {
   wr.onresult = e => {
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const t = (e.results[i][0]?.transcript ?? '').toLowerCase().replace(/[^a-z\s]/g, '');
-      if (t.includes('record')) { triggerFromWake(); return; }
+      if (/\brecord\b/.test(t)) { triggerFromWake(); return; }
     }
   };
 
@@ -593,7 +647,7 @@ function stopWake() {
 }
 
 function triggerFromWake() {
-  if (S.recording) return;                          // guard double-trigger
+  if (S.recording || S.wakeCooldown) return;                          // guard double-trigger
   const wr = S.wakeRec; S.wakeRec = null;           // detach before abort so onend won't restart
   if (wr) { try { wr.abort(); } catch(_) {} }
 
@@ -737,7 +791,9 @@ saveBtn.addEventListener('click', () => {
   S.finalTx = ''; S.interimTx = ''; S.seconds = 0;
   recTimer.textContent = '00:00';
   renderTx(); saveBtn.disabled = clearBtn.disabled = true;
+  S.wakeCooldown = true; setTimeout(() => { S.wakeCooldown = false; }, 3000);
   renderMemos(); toast('Memo saved');
+  saveRemoteMemos();
 });
 
 clearBtn.addEventListener('click', () => {
@@ -775,7 +831,7 @@ function renderMemos() {
 
 function delMemo(id) {
   S.memos = S.memos.filter(m => m.id !== id);
-  persist(); renderMemos(); toast('Memo deleted');
+  persist(); renderMemos(); toast('Memo deleted'); saveRemoteMemos();
 }
 
 function dlMemo(id) {
@@ -902,6 +958,96 @@ function toast(msg) {
   document.body.appendChild(t);
   setTimeout(() => t.remove(), 3000);
 }
+
+// ── SYNC CODE GENERATION ─────────────────────────────────────────────────────
+function genSyncCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const code = Array.from({length:8}, () => chars[Math.floor(Math.random()*chars.length)]).join('');
+  localStorage.setItem('vmSyncCode', code);
+  return code;
+}
+
+// ── SYNC UI INIT ─────────────────────────────────────────────────────────────
+const syncCodeBtn  = $('syncCodeBtn');
+const syncEditBtn  = $('syncEditBtn');
+const syncStatusEl = $('syncStatusEl');
+
+syncCodeBtn.textContent = S.syncCode;
+
+syncCodeBtn.addEventListener('click', () => {
+  navigator.clipboard?.writeText(S.syncCode).then(() => toast('Sync code copied')).catch(() => {});
+});
+
+syncEditBtn.addEventListener('click', () => {
+  const bg = document.createElement('div');
+  bg.className = 'sync-modal-bg';
+  bg.innerHTML = `<div class="sync-modal">
+    <div class="sync-modal-title">CHANGE SYNC CODE</div>
+    <p>Enter the sync code from another device to share memos across devices. Your current code: <strong style="color:var(--amber)">${S.syncCode}</strong></p>
+    <input class="sync-modal-input" id="syncInput" maxlength="8" placeholder="Enter 8-char code">
+    <div class="sync-modal-row">
+      <button class="btn btn-primary" id="syncApplyBtn" style="flex:1">APPLY</button>
+      <button class="btn btn-ghost" id="syncCancelBtn" style="flex:1">CANCEL</button>
+    </div>
+  </div>`;
+  document.body.appendChild(bg);
+  const input = bg.querySelector('#syncInput');
+  input.focus();
+  input.addEventListener('input', () => { input.value = input.value.toUpperCase().replace(/[^A-Z0-9]/g,''); });
+  bg.querySelector('#syncCancelBtn').addEventListener('click', () => bg.remove());
+  bg.querySelector('#syncApplyBtn').addEventListener('click', () => {
+    const code = input.value.trim().toUpperCase();
+    if (code.length < 4) { toast('Code must be at least 4 characters'); return; }
+    S.syncCode = code;
+    localStorage.setItem('vmSyncCode', code);
+    syncCodeBtn.textContent = code;
+    bg.remove();
+    toast('Sync code updated — loading shared memos…');
+    loadRemoteMemos();
+  });
+});
+
+// ── REMOTE SYNC ──────────────────────────────────────────────────────────────
+function setSyncStatus(state, msg) {
+  syncStatusEl.className = 'sync-status' + (state ? ' ' + state : '');
+  syncStatusEl.textContent = msg;
+}
+
+async function loadRemoteMemos() {
+  setSyncStatus('syncing', '⟳ SYNCING');
+  try {
+    const res = await fetch('/api/memos?code=' + S.syncCode);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const remote = await res.json();
+    // Merge: union by id, newest first
+    const map = new Map();
+    [...S.memos, ...remote].forEach(m => { if (!map.has(m.id)) map.set(m.id, m); });
+    S.memos = [...map.values()].sort((a,b) => b.id - a.id);
+    persist(); renderMemos();
+    setSyncStatus('synced', '✓ SYNCED');
+  } catch(e) {
+    setSyncStatus('error', '✗ OFFLINE');
+  }
+}
+
+async function saveRemoteMemos() {
+  setSyncStatus('syncing', '⟳ SAVING');
+  try {
+    const res = await fetch('/api/memos', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ code: S.syncCode, memos: S.memos }),
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    setSyncStatus('synced', '✓ SYNCED');
+  } catch(e) {
+    setSyncStatus('error', '✗ OFFLINE');
+  }
+}
+
+// Load remote memos on startup
+loadRemoteMemos();
+
 </script>
 </body>
 </html>
