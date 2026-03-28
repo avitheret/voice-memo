@@ -489,7 +489,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 1, minor: 7 };
+const VERSION = { major: 1, minor: 8 };
 const SILENCE_MS = 5000;   // auto-stop after 5 s of silence
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
@@ -688,17 +688,25 @@ async function startRec() {
   S.recognition.lang           = 'en-US';
 
   S.recognition.onresult = e => {
-    resetSilenceTimer();              // speech detected — push the auto-stop window out
+    let speechDetected = false;
     let interim = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
-      // Fix: transcript lives on the first alternative [0], not on the result itself.
-      // Accessing result.transcript returns undefined in some Chrome versions,
-      // which gets coerced to the literal string "undefined" when concatenated.
       const t = e.results[i][0]?.transcript ?? '';
-      e.results[i].isFinal ? (S.finalTx += t + ' ') : (interim = t);
+      if (e.results[i].isFinal) {
+        S.finalTx += t + ' ';
+        speechDetected = true;               // confirmed word(s) → reset timer
+      } else {
+        interim = t;
+        // Only count non-trivial interim as speech; Chrome emits onresult
+        // continuously with empty strings for ambient noise when
+        // interimResults:true — resetting on those prevents the 5s countdown
+        // from ever completing.
+        if (t.trim().length > 1) speechDetected = true;
+      }
     }
     S.interimTx = interim;
     renderTx();
+    if (speechDetected) resetSilenceTimer();
   };
 
   S.recognition.onerror = e => {
