@@ -437,7 +437,8 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 1, minor: 4 };
+const VERSION = { major: 1, minor: 5 };
+const SILENCE_MS = 5000;   // auto-stop after 5 s of silence
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -450,11 +451,12 @@ const S = {
   timerID:     null,
   recognition: null,
   wakeRec:     null,
-  audioCtx:    null,
-  analyser:    null,
-  stream:      null,
-  raf:         null,
-  idlePhase:   0,
+  audioCtx:     null,
+  analyser:     null,
+  stream:       null,
+  raf:          null,
+  idlePhase:    0,
+  silenceTimer: null,
 };
 
 // ── DOM ───────────────────────────────────────────────────────────────────────
@@ -537,7 +539,7 @@ function makeWakeRec() {
 
   wr.onresult = e => {
     for (let i = e.resultIndex; i < e.results.length; i++) {
-      const t = e.results[i].transcript.toLowerCase().replace(/[^a-z\s]/g, '');
+      const t = (e.results[i][0]?.transcript ?? '').toLowerCase().replace(/[^a-z\s]/g, '');
       if (t.includes('record')) { triggerFromWake(); return; }
     }
   };
@@ -632,9 +634,13 @@ async function startRec() {
   S.recognition.lang           = 'en-US';
 
   S.recognition.onresult = e => {
+    resetSilenceTimer();              // speech detected — push the auto-stop window out
     let interim = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
-      const t = e.results[i].transcript;
+      // Fix: transcript lives on the first alternative [0], not on the result itself.
+      // Accessing result.transcript returns undefined in some Chrome versions,
+      // which gets coerced to the literal string "undefined" when concatenated.
+      const t = e.results[i][0]?.transcript ?? '';
       e.results[i].isFinal ? (S.finalTx += t + ' ') : (interim = t);
     }
     S.interimTx = interim;
@@ -661,12 +667,14 @@ async function startRec() {
   setStatus('on', 'RECORDING');
 
   S.timerID = setInterval(() => { S.seconds++; recTimer.textContent = fmt(S.seconds); }, 1000);
+  resetSilenceTimer();
   S.analyser ? drawLive() : drawFakeWave();
 }
 
-function stopRec() {
+function stopRec(autoStopped = false) {
   S.recording = false;
 
+  clearTimeout(S.silenceTimer); S.silenceTimer = null;
   if (S.recognition) { S.recognition.stop(); S.recognition = null; }
   if (S.stream)      { S.stream.getTracks().forEach(t => t.stop()); S.stream = null; }
   if (S.audioCtx)    { S.audioCtx.close(); S.audioCtx = null; S.analyser = null; }
@@ -796,6 +804,14 @@ document.querySelectorAll('.setup-tab').forEach(tab => {
   });
 });
 
+// ── SILENCE TIMER ─────────────────────────────────────────────────────────────
+function resetSilenceTimer() {
+  clearTimeout(S.silenceTimer);
+  S.silenceTimer = setTimeout(() => {
+    if (S.recording) { stopRec(); toast('Auto-stopped — 5s silence'); }
+  }, SILENCE_MS);
+}
+
 // ── WAVEFORM ──────────────────────────────────────────────────────────────────
 function drawLive() {
   if (!S.analyser || !S.recording) return;
@@ -814,6 +830,9 @@ function drawLive() {
   }
   const db = sum/N > 0.001 ? Math.round(20*Math.log10(sum/N)) : -Infinity;
   vuMeter.textContent = isFinite(db) ? `${db} dB` : '–∞ dB';
+
+  // Audio energy detected → push silence window out
+  if (sum / N > 0.02) resetSilenceTimer();
 }
 
 function drawFakeWave() {
