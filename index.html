@@ -284,49 +284,10 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 
 
-/* ── SYNC BAR ───────────────────────── */
-.sync-bar {
-  padding: 7px 24px; border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; gap: 8px;
-  background: var(--surface2); flex-shrink: 0;
-}
-.sync-lbl { font-size: 11px; letter-spacing: 0.06em; color: var(--text-faint); white-space: nowrap; font-weight: 700; }
-.sync-code {
-  font-size: 13px; letter-spacing: 0.12em; color: var(--amber);
-  cursor: pointer; border: none; background: none; font-family: var(--mono);
-  padding: 0;
-}
-.sync-code:hover { color: #F0B030; }
-.sync-sep { color: var(--text-faint); font-size: 13px; }
-.sync-edit {
-  font-size: 11px; color: var(--text-faint); background: none; border: none;
-  cursor: pointer; font-family: var(--mono); padding: 0; letter-spacing: 0.04em; font-weight: 700;
-}
-.sync-edit:hover { color: var(--text-dim); }
-.sync-status { margin-left: auto; font-size: 11px; letter-spacing: 0.04em; color: var(--text-faint); white-space: nowrap; font-weight: 700; }
-.sync-status.syncing { color: var(--amber-dim); }
-.sync-status.synced  { color: #4A8C5C; }
-.sync-status.error   { color: var(--red); }
-
-/* ── SYNC CODE MODAL ─────────────────── */
-.sync-modal-bg {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.7);
-  display: flex; align-items: center; justify-content: center; z-index: 300;
-}
-.sync-modal {
-  background: var(--surface); border: 1px solid var(--border-hi);
-  padding: 24px 28px; min-width: 280px; max-width: 340px;
-  display: flex; flex-direction: column; gap: 14px;
-}
-.sync-modal-title { font-family: var(--display); font-size: 26px; letter-spacing: 0.08em; color: var(--amber); }
-.sync-modal p { font-size: 14px; color: var(--text-dim); line-height: 1.65; font-weight: 600; }
-.sync-modal-input {
-  font-family: var(--mono); font-size: 17px; letter-spacing: 0.2em; font-weight: 700;
-  background: var(--surface2); border: 1px solid var(--border-hi);
-  color: var(--text); padding: 11px 13px; text-transform: uppercase; width: 100%;
-}
-.sync-modal-input::placeholder { color: var(--text-faint); text-transform: none; letter-spacing: 0.05em; }
-.sync-modal-row { display: flex; gap: 10px; }
+/* sync status colours used inline in status bar */
+.syncing { color: var(--amber-dim) !important; }
+.synced  { color: var(--green)     !important; }
+.sync-err{ color: var(--red)       !important; }
 
 /* ── RESPONSIVE ─────────────────── */
 @media (max-width: 700px) {
@@ -442,13 +403,6 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
         <div class="memos-title">RECORDINGS</div>
         <button class="btn btn-ghost btn-sm" id="exportAllBtn">EXPORT ALL ↓</button>
       </div>
-      <div class="sync-bar">
-        <span class="sync-lbl">SYNC</span>
-        <button class="sync-code" id="syncCodeBtn" title="Click to copy sync code">????????</button>
-        <span class="sync-sep">·</span>
-        <button class="sync-edit" id="syncEditBtn" title="Enter code from another device">CHANGE</button>
-        <span class="sync-status" id="syncStatusEl">–</span>
-      </div>
       <div class="memos-list" id="memosList">
         <div class="empty-state" id="emptyState">
           <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
@@ -465,13 +419,15 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
   <div class="status-bar">
     <span><span class="dot" id="statusDot"></span><span id="statusText">IDLE</span></span>
+    <span id="syncStatusEl" style="margin-left:auto;font-size:11px;font-weight:700;letter-spacing:0.04em;color:var(--text-faint)">–</span>
     <span id="browserNote"></span>
   </div>
 </div>
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 2, minor: 3 };
+const VERSION = { major: 2, minor: 4 };
+const DB_KEY   = 'MAIN';          // single shared DB — all devices auto-connect
 const SILENCE_MS = 5000;   // auto-stop after 5 s of silence
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
@@ -489,7 +445,6 @@ const S = {
   raf:          null,
   idlePhase:    0,
   silenceTimer:  null,
-  syncCode:      localStorage.getItem('vmSyncCode') || genSyncCode(),
   lang:          localStorage.getItem('vmLang') || 'en-US',
 };
 
@@ -682,7 +637,7 @@ saveBtn.addEventListener('click', () => {
   recTimer.textContent = '00:00';
   renderTx(); saveBtn.disabled = clearBtn.disabled = true;
   renderMemos(); toast('Memo saved');
-  saveRemoteMemos();
+  pushMemos();
 });
 
 clearBtn.addEventListener('click', () => {
@@ -720,7 +675,7 @@ function renderMemos() {
 
 function delMemo(id) {
   S.memos = S.memos.filter(m => m.id !== id);
-  persist(); renderMemos(); toast('Memo deleted'); saveRemoteMemos();
+  persist(); renderMemos(); toast('Memo deleted'); pushMemos();
 }
 
 function dlMemo(id) {
@@ -852,74 +807,26 @@ function toast(msg) {
   setTimeout(() => t.remove(), 3000);
 }
 
-// ── SYNC CODE GENERATION ─────────────────────────────────────────────────────
-function genSyncCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const code = Array.from({length:8}, () => chars[Math.floor(Math.random()*chars.length)]).join('');
-  localStorage.setItem('vmSyncCode', code);
-  return code;
-}
+// ── SHARED DB SYNC ────────────────────────────────────────────────────────────
+// All devices share one DB key — no setup, no codes, no exports.
+// Save → immediately writes to DB. Poll every 10 s keeps all devices current.
 
-// ── SYNC UI INIT ─────────────────────────────────────────────────────────────
-const syncCodeBtn  = $('syncCodeBtn');
-const syncEditBtn  = $('syncEditBtn');
 const syncStatusEl = $('syncStatusEl');
 
-syncCodeBtn.textContent = S.syncCode;
-
-syncCodeBtn.addEventListener('click', () => {
-  navigator.clipboard?.writeText(S.syncCode).then(() => toast('Sync code copied')).catch(() => {});
-});
-
-syncEditBtn.addEventListener('click', () => {
-  const bg = document.createElement('div');
-  bg.className = 'sync-modal-bg';
-  bg.innerHTML = `<div class="sync-modal">
-    <div class="sync-modal-title">CHANGE SYNC CODE</div>
-    <p>Enter the sync code from another device to share memos across devices. Your current code: <strong style="color:var(--amber)">${S.syncCode}</strong></p>
-    <input class="sync-modal-input" id="syncInput" maxlength="8" placeholder="Enter 8-char code">
-    <div class="sync-modal-row">
-      <button class="btn btn-primary" id="syncApplyBtn" style="flex:1">APPLY</button>
-      <button class="btn btn-ghost" id="syncCancelBtn" style="flex:1">CANCEL</button>
-    </div>
-  </div>`;
-  document.body.appendChild(bg);
-  const input = bg.querySelector('#syncInput');
-  input.focus();
-  input.addEventListener('input', () => { input.value = input.value.toUpperCase().replace(/[^A-Z0-9]/g,''); });
-  bg.querySelector('#syncCancelBtn').addEventListener('click', () => bg.remove());
-  bg.querySelector('#syncApplyBtn').addEventListener('click', () => {
-    const code = input.value.trim().toUpperCase();
-    if (code.length < 4) { toast('Code must be at least 4 characters'); return; }
-    S.syncCode = code;
-    localStorage.setItem('vmSyncCode', code);
-    syncCodeBtn.textContent = code;
-    bg.remove();
-    toast('Sync code updated — loading shared memos…');
-    loadRemoteMemos();
-  });
-});
-
-// ── REMOTE SYNC ──────────────────────────────────────────────────────────────
-function setSyncStatus(state, msg) {
-  syncStatusEl.className = 'sync-status' + (state ? ' ' + state : '');
+function setSyncStatus(cls, msg) {
+  syncStatusEl.className = cls;
   syncStatusEl.textContent = msg;
 }
 
-// ── CONFLICT RESOLUTION ───────────────────────────────────────────────────────
-// Each save writes { memos, savedAt } to Netlify Blobs.
-// On sync: whichever side was saved MORE RECENTLY is the authoritative list for
-// deletions; memos created AFTER that timestamp on the other side are merged in.
-// This lets deletions propagate while never dropping a freshly dictated memo.
-
 let syncInFlight = false;
 
-async function loadRemoteMemos(quiet = false) {
-  if (S.recording || syncInFlight) return;
+async function pullMemos() {
+  // Pull latest from DB and merge with local state.
+  // Deletions made by a newer save win; new memos made locally are preserved.
+  if (syncInFlight) return;
   syncInFlight = true;
-  if (!quiet) setSyncStatus('syncing', '⟳ SYNCING');
   try {
-    const res = await fetch('/api/memos?code=' + S.syncCode);
+    const res = await fetch('/api/memos?code=' + DB_KEY);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const { memos: remote, savedAt: remoteSavedAt = 0 } = await res.json();
 
@@ -927,32 +834,30 @@ async function loadRemoteMemos(quiet = false) {
     let merged;
 
     if (remoteSavedAt > localSavedAt) {
-      // Remote is newer — use it as base, then add local memos created
-      // AFTER the remote was last saved (dictated locally, not yet pushed).
+      // DB is newer — use it as base, preserve local memos created after last DB save
       const localNew = S.memos.filter(m => m.id > remoteSavedAt);
       const map = new Map();
       [...remote, ...localNew].forEach(m => { if (!map.has(m.id)) map.set(m.id, m); });
       merged = [...map.values()].sort((a, b) => b.id - a.id);
     } else {
-      // Local is same age or newer — union merge so remote additions aren't lost.
+      // Local is same age or newer — union so neither side loses new memos
       const map = new Map();
       [...S.memos, ...remote].forEach(m => { if (!map.has(m.id)) map.set(m.id, m); });
       merged = [...map.values()].sort((a, b) => b.id - a.id);
     }
 
     const changed = JSON.stringify(merged) !== JSON.stringify(S.memos);
-    S.memos = merged;
-    persist();
-    if (changed) renderMemos();
-    setSyncStatus('synced', '✓ SYNCED');
+    if (changed) { S.memos = merged; persist(); renderMemos(); }
+    setSyncStatus('synced', '● LIVE');
   } catch(e) {
-    setSyncStatus('error', '✗ OFFLINE');
+    setSyncStatus('sync-err', '○ OFFLINE');
   } finally {
     syncInFlight = false;
   }
 }
 
-async function saveRemoteMemos() {
+async function pushMemos() {
+  // Write current state to DB immediately.
   const savedAt = Date.now();
   localStorage.setItem('vmSavedAt', String(savedAt));
   setSyncStatus('syncing', '⟳ SAVING');
@@ -960,22 +865,22 @@ async function saveRemoteMemos() {
     const res = await fetch('/api/memos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: S.syncCode, memos: S.memos, savedAt }),
+      body: JSON.stringify({ code: DB_KEY, memos: S.memos, savedAt }),
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    setSyncStatus('synced', '✓ SYNCED');
+    setSyncStatus('synced', '● LIVE');
   } catch(e) {
-    setSyncStatus('error', '✗ OFFLINE');
+    setSyncStatus('sync-err', '○ OFFLINE');
   }
 }
 
-// ── AUTO-SYNC TRIGGERS ────────────────────────────────────────────────────────
-setInterval(() => loadRemoteMemos(true), 30_000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) loadRemoteMemos(true); });
-window.addEventListener('focus', () => loadRemoteMemos(true));
+// Poll every 10 s; also sync on tab focus / visibility restore
+setInterval(() => { if (!S.recording) pullMemos(); }, 10_000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !S.recording) pullMemos(); });
+window.addEventListener('focus', () => { if (!S.recording) pullMemos(); });
 
-// Initial load
-loadRemoteMemos();
+// Merge any existing local memos into DB on first load, then keep pulling
+pullMemos();
 
 </script>
 </body>
