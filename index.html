@@ -153,6 +153,20 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 .tx-actions { display: flex; gap: 10px; flex-shrink: 0; }
 
+/* ── LANGUAGE TOGGLE ────────────────── */
+.lang-row { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.lang-row .section-label { flex: 1; }
+.lang-toggle { display: flex; flex-shrink: 0; }
+.lang-btn {
+  padding: 3px 11px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.04em;
+  border: 1px solid var(--border); background: transparent; color: var(--text-faint);
+  cursor: pointer; transition: all 0.15s; font-weight: 700;
+}
+.lang-btn:first-child { border-radius: 1px 0 0 1px; }
+.lang-btn:last-child  { border-radius: 0 1px 1px 0; border-left: none; }
+.lang-btn.active      { background: var(--surface2); color: var(--amber); border-color: var(--amber-dim); }
+.lang-btn:not(.active):hover { color: var(--text-dim); background: var(--surface2); }
+
 
 /* Buttons */
 .btn { padding: 11px 22px; font-family: var(--mono); font-size: 13px; letter-spacing: 0.05em; text-transform: uppercase; cursor: pointer; border-radius: 2px; border: 1px solid; transition: all 0.15s; font-weight: 800; }
@@ -319,7 +333,13 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
       </div>
 
-      <div class="section-label">Live Transcription</div>
+      <div class="lang-row">
+        <div class="section-label">Live Transcription</div>
+        <div class="lang-toggle">
+          <button class="lang-btn" data-lang="en-US" id="langEN">EN</button>
+          <button class="lang-btn" data-lang="he-IL" id="langHE">עב</button>
+        </div>
+      </div>
 
       <div class="tx-box">
         <div class="tx-text" id="txText"></div>
@@ -407,11 +427,9 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION     = { major: 2, minor: 5 };
-const DB_KEY      = 'MAIN';       // single shared DB — all devices auto-connect
-// Auto-detect language from device locale — no toggle needed
-const DEVICE_LANG = navigator.language?.startsWith('he') ? 'he-IL' : (navigator.language || 'en-US');
-const IS_RTL      = DEVICE_LANG === 'he-IL';
+const VERSION = { major: 2, minor: 6 };
+const DB_KEY  = 'MAIN';   // single shared DB — all devices auto-connect
+const API     = 'https://voice-memo-avi.netlify.app/api/memos'; // absolute so GitHub Pages works too
 const SILENCE_MS = 5000;   // auto-stop after 5 s of silence
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
@@ -429,6 +447,7 @@ const S = {
   raf:          null,
   idlePhase:    0,
   silenceTimer:  null,
+  lang:          localStorage.getItem('vmLang') || 'en-US',
 };
 
 // ── DOM ───────────────────────────────────────────────────────────────────────
@@ -514,7 +533,7 @@ async function startRec() {
   S.recognition = new SR();
   S.recognition.continuous     = true;
   S.recognition.interimResults = true;
-  S.recognition.lang           = DEVICE_LANG;
+  S.recognition.lang           = S.lang;
 
   S.recognition.onresult = e => {
     let speechDetected = false;
@@ -588,9 +607,6 @@ function stopRec(autoStopped = false) {
 }
 
 // ── TRANSCRIPTION ─────────────────────────────────────────────────────────────
-// Apply RTL automatically based on device language — no toggle needed
-txText.dir         = IS_RTL ? 'rtl' : 'ltr';
-txText.style.textAlign = IS_RTL ? 'right' : '';
 
 function renderTx() {
   const f = S.finalTx, i = S.interimTx;
@@ -618,7 +634,7 @@ saveBtn.addEventListener('click', () => {
 
   const text = S.finalTx.trim();
   if (!text) return;
-  const memo = { id: Date.now(), text, duration: S.seconds, date: new Date().toISOString(), lang: DEVICE_LANG };
+  const memo = { id: Date.now(), text, duration: S.seconds, date: new Date().toISOString(), lang: S.lang };
   S.memos.unshift(memo); persist();
   S.finalTx = ''; S.interimTx = ''; S.seconds = 0;
   recTimer.textContent = '00:00';
@@ -691,6 +707,24 @@ document.querySelectorAll('.setup-tab').forEach(tab => {
   });
 });
 
+
+// ── LANGUAGE TOGGLE ───────────────────────────────────────────────────────────
+(function () {
+  const btns = document.querySelectorAll('.lang-btn');
+
+  function applyLang(lang) {
+    S.lang = lang;
+    localStorage.setItem('vmLang', lang);
+    btns.forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+    const isHe = lang === 'he-IL';
+    txText.dir             = isHe ? 'rtl' : 'ltr';
+    txText.style.textAlign = isHe ? 'right' : '';
+    if (S.recognition) S.recognition.lang = lang;
+  }
+
+  btns.forEach(btn => btn.addEventListener('click', () => applyLang(btn.dataset.lang)));
+  applyLang(S.lang);   // initialise from saved preference
+})();
 
 // ── SILENCE TIMER ─────────────────────────────────────────────────────────────
 function resetSilenceTimer() {
@@ -793,7 +827,7 @@ async function pullMemos(pushAfterIfNew = false) {
   if (syncInFlight) return;
   syncInFlight = true;
   try {
-    const res = await fetch('/api/memos?code=' + DB_KEY);
+    const res = await fetch(API + '?code=' + DB_KEY);
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const { memos: remote, savedAt: remoteSavedAt = 0 } = await res.json();
 
@@ -839,7 +873,7 @@ async function pushMemos() {
   localStorage.setItem('vmSavedAt', String(savedAt));
   setSyncStatus('syncing', '⟳ SAVING');
   try {
-    const res = await fetch('/api/memos', {
+    const res = await fetch(API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code: DB_KEY, memos: S.memos, savedAt }),
