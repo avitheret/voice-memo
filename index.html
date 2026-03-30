@@ -483,14 +483,15 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
   <div class="status-bar">
     <span><span class="dot" id="statusDot"></span><span id="statusText">IDLE</span></span>
-    <span id="syncStatusEl" style="margin-left:auto;font-size:11px;font-weight:700;letter-spacing:0.04em;color:var(--text-faint)">–</span>
+    <button id="forceSyncBtn" style="margin-left:auto;background:none;border:none;cursor:pointer;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:0.04em;color:var(--text-faint);padding:0" title="Force push local memos to DB now">⟳ SYNC NOW</button>
+    <span id="syncStatusEl" style="font-size:11px;font-weight:700;letter-spacing:0.04em;color:var(--text-faint)">–</span>
     <span id="browserNote"></span>
   </div>
 </div>
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 2, minor: 8 };
+const VERSION = { major: 2, minor: 9 };
 const DB_KEY  = 'MAIN';   // single shared DB — all devices auto-connect
 const API     = 'https://voice-memo-avi.netlify.app/api/memos'; // absolute so GitHub Pages works too
 const SILENCE_MS = 5000;   // auto-stop after 5 s of silence
@@ -1021,7 +1022,18 @@ function toast(msg) {
 // All devices share one DB key — no setup, no codes, no exports.
 // Save → immediately writes to DB. Poll every 10 s keeps all devices current.
 
-const syncStatusEl = $('syncStatusEl');
+const syncStatusEl  = $('syncStatusEl');
+const forceSyncBtn  = $('forceSyncBtn');
+
+forceSyncBtn.addEventListener('click', async () => {
+  forceSyncBtn.textContent = '⟳ PUSHING…';
+  forceSyncBtn.style.color = 'var(--amber-dim)';
+  await pushMemos();
+  forceSyncBtn.textContent = '⟳ SYNC NOW';
+  forceSyncBtn.style.color = '';
+  await pullMemos(false);
+  toast(`Pushed ${S.memos.length} memo${S.memos.length !== 1 ? 's' : ''} to shared DB`);
+});
 
 function setSyncStatus(cls, msg) {
   syncStatusEl.className = cls;
