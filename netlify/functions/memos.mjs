@@ -19,17 +19,18 @@ export default async (req) => {
 
     const raw = await store.get(code).catch(() => null);
 
-    // Support both old format (plain array) and new format ({ memos, savedAt })
+    // Support legacy plain-array format and current { memos, folders, savedAt }
     let payload;
     try {
       const parsed = JSON.parse(raw ?? "null");
       if (Array.isArray(parsed)) {
-        payload = { memos: parsed, savedAt: 0 };   // legacy
+        payload = { memos: parsed, folders: [], savedAt: 0 };   // legacy
       } else {
-        payload = parsed ?? { memos: [], savedAt: 0 };
+        payload = parsed ?? { memos: [], folders: [], savedAt: 0 };
+        payload.folders = payload.folders ?? [];
       }
     } catch {
-      payload = { memos: [], savedAt: 0 };
+      payload = { memos: [], folders: [], savedAt: 0 };
     }
 
     return new Response(JSON.stringify(payload), { headers: CORS });
@@ -46,6 +47,7 @@ export default async (req) => {
 
     await store.set(code, JSON.stringify({
       memos:   body.memos   ?? [],
+      folders: body.folders ?? [],
       savedAt: body.savedAt ?? Date.now(),
     }));
     return new Response(JSON.stringify({ ok: true }), { headers: CORS });

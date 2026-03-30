@@ -290,6 +290,58 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 .synced  { color: var(--green)     !important; }
 .sync-err{ color: var(--red)       !important; }
 
+/* ── FOLDERS ────────────────────── */
+.folder-bar {
+  display: flex; align-items: stretch; overflow-x: auto; flex-shrink: 0;
+  border-bottom: 1px solid var(--border); background: var(--surface2);
+  scrollbar-width: none;
+}
+.folder-bar::-webkit-scrollbar { display: none; }
+
+.folder-tab {
+  flex-shrink: 0; padding: 9px 16px;
+  font-family: var(--mono); font-size: 12px; font-weight: 800; letter-spacing: 0.05em;
+  text-transform: uppercase; border: none; border-bottom: 3px solid transparent;
+  background: transparent; color: var(--text-faint); cursor: pointer;
+  transition: all 0.15s; white-space: nowrap; border-right: 1px solid var(--border);
+}
+.folder-tab:hover { color: var(--text); background: var(--surface); }
+.folder-tab.active { color: var(--amber); border-bottom-color: var(--amber); background: var(--surface); }
+
+.folder-add-btn {
+  flex-shrink: 0; margin-left: auto; padding: 9px 16px;
+  font-family: var(--mono); font-size: 12px; font-weight: 800; letter-spacing: 0.05em;
+  border: none; border-left: 1px solid var(--border); background: transparent;
+  color: var(--text-faint); cursor: pointer; transition: all 0.15s; white-space: nowrap;
+}
+.folder-add-btn:hover { color: var(--amber); background: var(--surface); }
+
+/* folder badge on memo items */
+.memo-folder-badge {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--amber-dim); background: var(--surface2); border: 1px solid var(--border);
+  padding: 1px 7px; border-radius: 1px; white-space: nowrap;
+}
+
+/* save-to row (left panel, shown after recording when folders exist) */
+.save-to-row {
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: wrap;
+  padding: 6px 0; border-top: 1px solid var(--border);
+}
+.save-to-lbl {
+  font-size: 10px; letter-spacing: 0.2em; color: var(--text-dim); font-weight: 800;
+  text-transform: uppercase; white-space: nowrap;
+}
+.folder-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.folder-chip {
+  padding: 4px 13px; font-family: var(--mono); font-size: 11px; font-weight: 800;
+  letter-spacing: 0.04em; border: 1px solid var(--border); background: transparent;
+  color: var(--text-faint); cursor: pointer; transition: all 0.15s; border-radius: 2px;
+  text-transform: uppercase;
+}
+.folder-chip:hover  { border-color: var(--amber-dim); color: var(--text); }
+.folder-chip.sel    { background: var(--amber); color: var(--bg); border-color: var(--amber); }
+
 /* ── RESPONSIVE ─────────────────── */
 @media (max-width: 700px) {
   main { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
@@ -350,6 +402,12 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
         <button class="btn btn-ghost"   id="clearBtn" disabled>CLEAR</button>
       </div>
 
+      <!-- Folder selector (shown when folders exist) -->
+      <div class="save-to-row" id="saveToRow" style="display:none">
+        <span class="save-to-lbl">SAVE TO</span>
+        <div class="folder-chips" id="folderChips"></div>
+      </div>
+
       <!-- iPhone Setup -->
       <details class="iphone-panel" id="iphonePanel">
         <summary class="iphone-summary">
@@ -404,6 +462,11 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
         <div class="memos-title">RECORDINGS</div>
         <button class="btn btn-ghost btn-sm" id="exportAllBtn">EXPORT ALL ↓</button>
       </div>
+      <!-- Folder tabs -->
+      <div class="folder-bar" id="folderBar">
+        <button class="folder-tab active" data-fid="" id="folderTabAll">ALL</button>
+        <button class="folder-add-btn" id="addFolderBtn">+ ADD FOLDER</button>
+      </div>
       <div class="memos-list" id="memosList">
         <div class="empty-state" id="emptyState">
           <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
@@ -427,7 +490,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 2, minor: 6 };
+const VERSION = { major: 2, minor: 7 };
 const DB_KEY  = 'MAIN';   // single shared DB — all devices auto-connect
 const API     = 'https://voice-memo-avi.netlify.app/api/memos'; // absolute so GitHub Pages works too
 const SILENCE_MS = 5000;   // auto-stop after 5 s of silence
@@ -448,6 +511,9 @@ const S = {
   idlePhase:    0,
   silenceTimer:  null,
   lang:          localStorage.getItem('vmLang') || 'en-US',
+  folders:       JSON.parse(localStorage.getItem('voiceFolders') || '[]'),
+  activeFolder:  null,   // null = all; folder id = filtered view
+  pendingFolder: null,   // folder id chosen before saving; null = unfiled
 };
 
 // ── DOM ───────────────────────────────────────────────────────────────────────
@@ -541,7 +607,9 @@ async function startRec() {
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const t = e.results[i][0]?.transcript ?? '';
       if (e.results[i].isFinal) {
-        S.finalTx += t + ' ';
+        if (!checkVoiceCommands(t.trim())) {
+          S.finalTx += t + ' ';
+        }
         speechDetected = true;               // confirmed word(s) → reset timer
       } else {
         interim = t;
@@ -634,12 +702,15 @@ saveBtn.addEventListener('click', () => {
 
   const text = S.finalTx.trim();
   if (!text) return;
-  const memo = { id: Date.now(), text, duration: S.seconds, date: new Date().toISOString(), lang: S.lang };
+  const fid  = S.pendingFolder;
+  const memo = { id: Date.now(), text, duration: S.seconds, date: new Date().toISOString(), lang: S.lang, folderId: fid || null };
   S.memos.unshift(memo); persist();
-  S.finalTx = ''; S.interimTx = ''; S.seconds = 0;
+  S.finalTx = ''; S.interimTx = ''; S.seconds = 0; S.pendingFolder = null;
   recTimer.textContent = '00:00';
   renderTx(); saveBtn.disabled = clearBtn.disabled = true;
-  renderMemos(); toast('Memo saved');
+  renderFolderChips();
+  const folderName = fid ? (S.folders.find(f => f.id === fid)?.name || 'folder') : null;
+  renderMemos(); toast(folderName ? `Saved to "${folderName}"` : 'Memo saved');
   pushMemos();
 });
 
@@ -651,20 +722,26 @@ clearBtn.addEventListener('click', () => {
 // ── MEMOS ─────────────────────────────────────────────────────────────────────
 function renderMemos() {
   memoCount.textContent = S.memos.length;
-  if (!S.memos.length) {
+  const visible = S.activeFolder
+    ? S.memos.filter(m => m.folderId === S.activeFolder)
+    : S.memos;
+  if (!visible.length) {
     memosList.innerHTML = '';
     memosList.appendChild(emptyState);
     emptyState.style.display = 'flex'; return;
   }
   emptyState.style.display = 'none';
-  memosList.innerHTML = S.memos.map((m, idx) => {
-    const d  = new Date(m.date);
-    const ds = d.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' ' +
-               d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
-    const n  = S.memos.length - idx;
+  memosList.innerHTML = visible.map((m, idx) => {
+    const d      = new Date(m.date);
+    const ds     = d.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' ' +
+                   d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+    const n      = visible.length - idx;
+    const folder = m.folderId ? S.folders.find(f => f.id === m.folderId) : null;
+    const badge  = folder ? `<span class="memo-folder-badge">${esc(folder.name)}</span>` : '';
     return `<div class="memo-item">
       <div class="memo-meta">
         <span class="memo-idx">MEMO ${String(n).padStart(2,'0')}</span>
+        ${badge}
         <span class="memo-date">${ds}${m.duration ? ' · ' + fmt(m.duration) : ''}</span>
       </div>
       <div class="memo-preview"${m.lang === 'he-IL' ? ' dir="rtl" style="text-align:right"' : ''}>${esc(m.text)}</div>
@@ -707,6 +784,135 @@ document.querySelectorAll('.setup-tab').forEach(tab => {
   });
 });
 
+
+// ── FOLDERS ───────────────────────────────────────────────────────────────────
+const folderBar   = $('folderBar');
+const saveToRow   = $('saveToRow');
+const folderChips = $('folderChips');
+
+function renderFolderBar() {
+  // Keep the ALL tab; remove old folder tabs (not the ADD FOLDER button)
+  folderBar.querySelectorAll('.folder-tab:not(#folderTabAll)').forEach(t => t.remove());
+  const addBtn = $('addFolderBtn');
+  S.folders.forEach(f => {
+    const tab = document.createElement('button');
+    tab.className   = 'folder-tab' + (S.activeFolder === f.id ? ' active' : '');
+    tab.dataset.fid = f.id;
+    tab.textContent = f.name;
+    folderBar.insertBefore(tab, addBtn);
+    tab.addEventListener('click', () => setActiveFolder(f.id));
+  });
+  $('folderTabAll').classList.toggle('active', !S.activeFolder);
+}
+
+function renderFolderChips() {
+  if (!S.folders.length) { saveToRow.style.display = 'none'; return; }
+  saveToRow.style.display = 'flex';
+  folderChips.innerHTML = '';
+  // "Unfiled" chip
+  const unfiledBtn = document.createElement('button');
+  unfiledBtn.className = 'folder-chip' + (!S.pendingFolder ? ' sel' : '');
+  unfiledBtn.textContent = 'UNFILED';
+  unfiledBtn.onclick = () => setPendingFolder(null);
+  folderChips.appendChild(unfiledBtn);
+  // One chip per folder
+  S.folders.forEach(f => {
+    const btn = document.createElement('button');
+    btn.className = 'folder-chip' + (S.pendingFolder === f.id ? ' sel' : '');
+    btn.textContent = f.name;
+    btn.onclick = () => setPendingFolder(f.id);
+    folderChips.appendChild(btn);
+  });
+}
+
+function setActiveFolder(id) {
+  S.activeFolder = (S.activeFolder === id) ? null : id;  // toggle off on re-click
+  renderFolderBar();
+  renderMemos();
+}
+
+function setPendingFolder(id) {
+  S.pendingFolder = id;
+  renderFolderChips();
+}
+
+function createFolder(name) {
+  name = name.trim();
+  if (!name) return;
+  if (S.folders.find(f => f.name.toLowerCase() === name.toLowerCase())) {
+    toast(`Folder "${name}" already exists`); return;
+  }
+  const folder = { id: Date.now(), name };
+  S.folders.push(folder);
+  persist();
+  renderFolderBar();
+  renderFolderChips();
+  toast(`Folder "${name}" created`);
+  pushMemos();
+}
+
+function promptAddFolder(prefilled = '') {
+  const bg = document.createElement('div');
+  bg.className = 'sync-modal-bg';  // reuse existing modal backdrop style
+  bg.innerHTML = `<div class="sync-modal">
+    <div class="sync-modal-title">NEW FOLDER</div>
+    <input class="sync-modal-input" id="folderNameInput" maxlength="40" placeholder="Folder name" value="${esc(prefilled)}">
+    <div class="sync-modal-row">
+      <button class="btn btn-primary" id="folderCreateBtn" style="flex:1">CREATE</button>
+      <button class="btn btn-ghost"   id="folderCancelBtn" style="flex:1">CANCEL</button>
+    </div>
+  </div>`;
+  document.body.appendChild(bg);
+  const inp = bg.querySelector('#folderNameInput');
+  inp.focus(); inp.select();
+  const doCreate = () => { const v = inp.value.trim(); bg.remove(); if (v) createFolder(v); };
+  bg.querySelector('#folderCreateBtn').onclick = doCreate;
+  bg.querySelector('#folderCancelBtn').onclick = () => bg.remove();
+  inp.addEventListener('keydown', e => { if (e.key === 'Enter') doCreate(); if (e.key === 'Escape') bg.remove(); });
+}
+
+$('addFolderBtn').addEventListener('click', () => promptAddFolder());
+$('folderTabAll').addEventListener('click', () => { S.activeFolder = null; renderFolderBar(); renderMemos(); });
+
+// ── VOICE COMMAND: ADD FOLDER / SAVE TO ───────────────────────────────────────
+function checkVoiceCommands(finalText) {
+  // Match "add folder [name]" / "create folder [name]" (English + common Hebrew equiv)
+  const addMatch = finalText.match(/\b(?:add|create|new)\s+folder(?:\s+(.+))?$/i)
+                || finalText.match(/\bהוסף\s+תיקייה(?:\s+(.+))?$/);
+  if (addMatch) {
+    const name = (addMatch[1] || '').trim();
+    // Strip the command phrase from the transcript
+    S.finalTx = S.finalTx.replace(finalText, '').trim();
+    if (S.finalTx) S.finalTx += ' ';
+    renderTx();
+    if (name) createFolder(name);
+    else promptAddFolder();
+    return true;
+  }
+
+  // Match "save to [name]"
+  const saveToMatch = finalText.match(/\bsave\s+to\s+(.+)$/i)
+                   || finalText.match(/\bשמור\s+ב(?:\s+(.+))?$/);
+  if (saveToMatch) {
+    const name   = (saveToMatch[1] || '').trim();
+    const folder = S.folders.find(f => f.name.toLowerCase() === name.toLowerCase());
+    if (folder) {
+      S.finalTx = S.finalTx.replace(finalText, '').trim();
+      if (S.finalTx) S.finalTx += ' ';
+      setPendingFolder(folder.id);
+      renderTx();
+      toast(`Will save to "${folder.name}"`);
+    } else if (name) {
+      toast(`No folder named "${name}"`);
+    }
+    return true;
+  }
+  return false;
+}
+
+// Init folder UI on load
+renderFolderBar();
+renderFolderChips();
 
 // ── LANGUAGE TOGGLE ───────────────────────────────────────────────────────────
 (function () {
@@ -790,7 +996,10 @@ function setStatus(type, text) {
   statusText.textContent = text;
 }
 
-function persist() { localStorage.setItem('voiceMemos', JSON.stringify(S.memos)); }
+function persist() {
+  localStorage.setItem('voiceMemos',   JSON.stringify(S.memos));
+  localStorage.setItem('voiceFolders', JSON.stringify(S.folders));
+}
 
 function dl(content, filename) {
   const a = Object.assign(document.createElement('a'), {
@@ -829,7 +1038,7 @@ async function pullMemos(pushAfterIfNew = false) {
   try {
     const res = await fetch(API + '?code=' + DB_KEY);
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    const { memos: remote, savedAt: remoteSavedAt = 0 } = await res.json();
+    const { memos: remote, folders: remoteFolders = [], savedAt: remoteSavedAt = 0 } = await res.json();
 
     const localSavedAt = parseInt(localStorage.getItem('vmSavedAt') || '0');
 
@@ -848,9 +1057,16 @@ async function pullMemos(pushAfterIfNew = false) {
       merged = [...map.values()].sort((a, b) => b.id - a.id);
     }
 
+    // Merge folders (union — never delete a folder during sync)
+    const folderMap = new Map();
+    [...S.folders, ...remoteFolders].forEach(f => { if (!folderMap.has(f.id)) folderMap.set(f.id, f); });
+    const mergedFolders = [...folderMap.values()].sort((a, b) => a.id - b.id);
+    const foldersChanged = JSON.stringify(mergedFolders) !== JSON.stringify(S.folders);
+    if (foldersChanged) { S.folders = mergedFolders; renderFolderBar(); renderFolderChips(); }
+
     const localHasNew = S.memos.some(m => !remote.find(r => r.id === m.id));
     const changed     = JSON.stringify(merged) !== JSON.stringify(S.memos);
-    if (changed) { S.memos = merged; persist(); renderMemos(); }
+    if (changed || foldersChanged) { S.memos = merged; persist(); renderMemos(); }
     setSyncStatus('synced', '● LIVE');
 
     // If this device had memos not yet in the DB, push them now so other
@@ -876,7 +1092,7 @@ async function pushMemos() {
     const res = await fetch(API, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: DB_KEY, memos: S.memos, savedAt }),
+      body: JSON.stringify({ code: DB_KEY, memos: S.memos, folders: S.folders, savedAt }),
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     setSyncStatus('synced', '● LIVE');
