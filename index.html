@@ -490,7 +490,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 2, minor: 7 };
+const VERSION = { major: 2, minor: 8 };
 const DB_KEY  = 'MAIN';   // single shared DB — all devices auto-connect
 const API     = 'https://voice-memo-avi.netlify.app/api/memos'; // absolute so GitHub Pages works too
 const SILENCE_MS = 5000;   // auto-stop after 5 s of silence
@@ -1038,24 +1038,14 @@ async function pullMemos(pushAfterIfNew = false) {
   try {
     const res = await fetch(API + '?code=' + DB_KEY);
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    const { memos: remote, folders: remoteFolders = [], savedAt: remoteSavedAt = 0 } = await res.json();
+    const { memos: remote, folders: remoteFolders = [] } = await res.json();
 
-    const localSavedAt = parseInt(localStorage.getItem('vmSavedAt') || '0');
-
-    // Always do a full union merge — every memo from every device is kept.
-    // If remote is newer, deletions on the remote side still propagate because
-    // only memos CREATED after the remote save are brought back from local.
-    let merged;
-    if (remoteSavedAt > localSavedAt) {
-      const localNew = S.memos.filter(m => m.id > remoteSavedAt);
-      const map = new Map();
-      [...remote, ...localNew].forEach(m => { if (!map.has(m.id)) map.set(m.id, m); });
-      merged = [...map.values()].sort((a, b) => b.id - a.id);
-    } else {
-      const map = new Map();
-      [...S.memos, ...remote].forEach(m => { if (!map.has(m.id)) map.set(m.id, m); });
-      merged = [...map.values()].sort((a, b) => b.id - a.id);
-    }
+    // Pure union merge — every memo from every device is always kept.
+    // Memos can only be removed by explicitly pressing DELETE (which calls pushMemos
+    // immediately, so the deletion propagates to the DB before the next pull).
+    const map = new Map();
+    [...S.memos, ...remote].forEach(m => { if (!map.has(m.id)) map.set(m.id, m); });
+    const merged = [...map.values()].sort((a, b) => b.id - a.id);
 
     // Merge folders (union — never delete a folder during sync)
     const folderMap = new Map();
