@@ -352,39 +352,6 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 .folder-chip:hover  { border-color: var(--amber-dim); color: var(--text); }
 .folder-chip.sel    { background: var(--amber); color: var(--bg); border-color: var(--amber); }
 
-/* ── ACTIVATE OVERLAY (iOS mic unlock) ─ */
-#activateOverlay {
-  position: fixed; inset: 0; z-index: 500;
-  background: rgba(245,241,232,0.97);
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 28px; cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-}
-#activateOverlay.hidden { display: none; }
-.overlay-mic {
-  width: 88px; height: 88px;
-  border: 2px solid var(--green); border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  color: var(--green);
-  animation: overlayPulse 1.8s ease-in-out infinite;
-}
-@keyframes overlayPulse {
-  0%,100% { box-shadow: 0 0 0 0 rgba(26,107,50,0.45); }
-  50%      { box-shadow: 0 0 0 24px rgba(26,107,50,0); }
-}
-.overlay-title {
-  font-family: var(--display); font-size: 38px; letter-spacing: 0.1em; color: var(--amber);
-}
-.overlay-cmd {
-  font-size: 13px; letter-spacing: 0.12em; color: var(--text-dim); font-weight: 700;
-  text-transform: uppercase; text-align: center; line-height: 2;
-}
-.overlay-hint {
-  font-size: 11px; letter-spacing: 0.08em; color: var(--text-faint); font-weight: 600;
-  text-transform: uppercase; margin-top: -12px;
-}
-
 /* ── MODAL ──────────────────────── */
 .sync-modal-bg {
   position: fixed; inset: 0; z-index: 600;
@@ -414,21 +381,6 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 </style>
 </head>
 <body>
-<!-- ── ACTIVATE OVERLAY — iOS mic-unlock tap gate ── -->
-<div id="activateOverlay" class="hidden">
-  <div class="overlay-mic">
-    <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-      <rect x="13" y="3" width="14" height="22" rx="7" stroke="currentColor" stroke-width="2"/>
-      <path d="M7 20c0 7.18 5.82 13 13 13s13-5.82 13-13" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      <line x1="20" y1="33" x2="20" y2="38" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      <line x1="13" y1="38" x2="27" y2="38" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-    </svg>
-  </div>
-  <div class="overlay-title">VOICE MEMO</div>
-  <div class="overlay-cmd">Say "Record" to start recording<br>Say "Create New Folder Called [name]"</div>
-  <div class="overlay-hint">▼ Tap anywhere to activate microphone ▼</div>
-</div>
-
 <div class="app">
 
   <header>
@@ -501,16 +453,15 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
           <!-- Tab: Siri Shortcut -->
           <div class="setup-content active" id="tab-shortcut">
-            <p class="setup-intro">Opens this app from Siri. Say <strong>"Hey Siri, Record"</strong> — recording starts automatically. Works with AirPods or any Bluetooth mic.</p>
+            <p class="setup-intro">100% hands-free. Say <strong>"Hey Siri, Record"</strong> → speak your memo → pause → it saves automatically. No tapping needed.</p>
             <div class="steps">
-              <div class="step"><div class="step-n">1</div><div class="step-text">Host this file on <strong>GitHub Pages</strong>, Netlify, or any web server — note the URL.</div></div>
-              <div class="step"><div class="step-n">2</div><div class="step-text">On iPhone, open the <strong>Shortcuts</strong> app → tap <code>+</code> to create a new shortcut.</div></div>
-              <div class="step"><div class="step-n">3</div><div class="step-text">Tap the shortcut name at the top → rename it <code>Record</code>.</div></div>
-              <div class="step"><div class="step-n">4</div><div class="step-text">Tap <strong>Add Action</strong> → search <code>Open URLs</code> → select it.</div></div>
-              <div class="step"><div class="step-n">5</div><div class="step-text">Set the URL to <code>https://avitheret.github.io/voice-memo/</code></div></div>
-              <div class="step"><div class="step-n">6</div><div class="step-text">Tap <strong>Done</strong>. Say <strong>"Hey Siri, Record"</strong> — app opens, <strong>tap anywhere</strong> on the screen, then say "Record" or "Create New Folder Called [name]".</div></div>
+              <div class="step"><div class="step-n">1</div><div class="step-text">Open the <strong>Shortcuts</strong> app → tap <code>+</code> → rename the shortcut <code>Record</code>.</div></div>
+              <div class="step"><div class="step-n">2</div><div class="step-text">Tap <strong>Add Action</strong> → search <code>Dictate Text</code> → select it. Set Language to <strong>English</strong> (or Hebrew), stops: <strong>After Pause</strong>.</div></div>
+              <div class="step"><div class="step-n">3</div><div class="step-text">Tap <code>+</code> → search <code>URL</code> → select <strong>URL</strong>. Enter:<br><code>https://avitheret.github.io/voice-memo/?save=1&amp;text=</code><br>then tap the variable chip and choose <strong>Dictated Text</strong>.</div></div>
+              <div class="step"><div class="step-n">4</div><div class="step-text">Tap <code>+</code> → search <code>Open URLs</code> → select it. It auto-uses the URL from step 3.</div></div>
+              <div class="step"><div class="step-n">5</div><div class="step-text">Tap <strong>Done</strong>. Say <strong>"Hey Siri, Record"</strong> — speak your memo — pause — the app opens and saves it instantly.</div></div>
             </div>
-            <p class="setup-note" style="margin-top:10px">On desktop (Chrome/Edge), use the <strong>wake word button</strong> above instead — no Siri needed.</p>
+            <p class="setup-note" style="margin-top:10px">To save to a folder, append <code>&amp;folder=Work</code> (replace Work with your folder name) to the URL in step 3. On desktop Chrome/Edge, command mode activates automatically — no setup needed.</p>
           </div>
 
           <!-- Tab: Standalone -->
@@ -569,7 +520,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 2, minor: 16 };
+const VERSION = { major: 2, minor: 17 };
 const DB_KEY  = 'MAIN';   // single shared DB — all devices auto-connect
 const API     = 'https://voice-memo-avi.netlify.app/api/memos'; // absolute so GitHub Pages works too
 const SILENCE_MS = 5000;   // auto-stop after 5 s of silence
@@ -652,25 +603,47 @@ renderMemos();
 // ── AUTO-OPEN iPHONE PANEL ────────────────────────────────────────────────────
 if (isIOS) $('iphonePanel').setAttribute('open', '');
 
-// ── ACTIVATE OVERLAY / AUTOSTART ──────────────────────────────────────────────
-// iOS Safari requires SpeechRecognition.start() to be called inside a genuine
-// user-gesture handler. setTimeout and synthetic clicks do NOT carry gesture tokens.
-//
-// Fix: on iOS, show a full-screen tap overlay. The user's tap IS a genuine touch
-// event, so calling startCmdMode() directly from that handler works.
-// On desktop, mic permission is usually already granted → auto-start after 500ms.
+// ── SIRI SHORTCUT: URL-PARAM AUTO-SAVE ───────────────────────────────────────
+// The Siri Shortcut uses iOS native "Dictate Text", then opens this app with
+// the transcribed text as a URL param: ?save=1&text=Hello+world[&folder=Work]
+// The app auto-saves it immediately on load — fully hands-free, no tap needed.
+// After saving the URL params are removed so a refresh doesn't re-save.
 
-const activateOverlay = $('activateOverlay');
+(function handleShortcutSave() {
+  const p = new URLSearchParams(location.search);
+  if (p.get('save') !== '1') return;
+  const text   = (p.get('text') || '').trim();
+  const folder = (p.get('folder') || '').trim();
+  if (!text) return;
 
-if (isIOS) {
-  // Show overlay — user must tap to unlock mic (iOS security requirement)
-  activateOverlay.classList.remove('hidden');
-  activateOverlay.addEventListener('click', () => {
-    activateOverlay.classList.add('hidden');
-    startCmdMode();
-  }, { once: true });
-} else {
-  // Desktop: auto-activate command mode (no user gesture required)
+  // Remove params from URL bar immediately (no history entry)
+  history.replaceState(null, '', location.pathname);
+
+  const fid = folder
+    ? (S.folders.find(f => f.name.toLowerCase() === folder.toLowerCase())?.id ?? null)
+    : null;
+
+  const memo = {
+    id:       Date.now(),
+    text,
+    duration: 0,
+    date:     new Date().toISOString(),
+    lang:     S.lang,
+    folderId: fid,
+  };
+  S.memos.unshift(memo);
+  persist();
+  renderMemos();
+  renderFolderBar();
+  toast(fid ? `Saved to "${folder}"` : 'Memo saved');
+  pushMemos();
+})();
+
+// ── DESKTOP AUTO-START COMMAND MODE ──────────────────────────────────────────
+// On desktop Chrome/Edge, mic permission persists → command mode auto-activates.
+// On iOS Safari, SpeechRecognition.start() requires a genuine touch event (Apple
+// security policy) — so command mode is started by the record button tap instead.
+if (!isIOS) {
   setTimeout(() => { if (!S.cmdListening && !S.recording) startCmdMode(); }, 500);
 }
 
@@ -770,9 +743,9 @@ function drawCmdWave() {
 
 // ── RECORD ────────────────────────────────────────────────────────────────────
 recBtn.addEventListener('click', () => {
-  // Tap while overlay is showing → let overlay handler deal with it
-  if (!activateOverlay.classList.contains('hidden')) return;
-  // Tap while in command mode → stop listening and start recording
+  // On iOS: first tap activates command mode (mic needs real touch event).
+  // On desktop: command mode is already running; tap starts recording.
+  if (isIOS && !S.cmdListening && !S.recording) { startCmdMode(); return; }
   if (S.cmdListening) { stopCmdMode(); startRec(); return; }
   S.recording ? stopRec() : startRec();
 });
