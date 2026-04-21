@@ -501,7 +501,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 2, minor: 12 };
+const VERSION = { major: 2, minor: 13 };
 const DB_KEY  = 'MAIN';   // single shared DB — all devices auto-connect
 const API     = 'https://voice-memo-avi.netlify.app/api/memos'; // absolute so GitHub Pages works too
 const SILENCE_MS = 5000;   // auto-stop after 5 s of silence
@@ -610,24 +610,23 @@ function startCmdMode() {
   cmdRecognition.onresult = e => {
     for (let i = e.resultIndex; i < e.results.length; i++) {
       if (!e.results[i].isFinal) continue;
-      const t = (e.results[i][0]?.transcript ?? '').trim();
+      const t  = (e.results[i][0]?.transcript ?? '').trim();
       const lo = t.toLowerCase();
 
-      // ── "Record" / "הקלט" ──────────────────────────────────────────────────
-      if (/^\s*record\s*$/i.test(lo) || /^הקלט$/.test(lo)) {
-        stopCmdMode();
-        startRec();
-        return;
+      // ── "Record" → start recording ─────────────────────────────────────────
+      if (/^record$/i.test(lo) || /^הקלט$/.test(lo)) {
+        stopCmdMode(); startRec(); return;
       }
 
-      // ── "Create New Folder Called [name]" ─────────────────────────────────
-      const m = lo.match(/(?:create|add|new)\s+(?:new\s+)?folder\s+called\s+(.+)/i)
-             || lo.match(/(?:create|add|new)\s+(?:new\s+)?folder\s+named\s+(.+)/i)
-             || lo.match(/תיקייה\s+(?:חדשה\s+)?(?:בשם\s+)?(.+)/);
-      if (m) {
-        createFolder(m[1].trim());
-        // Stay in command mode after creating a folder
-        return;
+      // ── "Create / New / Add [new] folder [called/named <name>]" ──────────
+      // Accepts: "Create new folder"  /  "New folder called Work"  /  "Add folder named Work"
+      const folderM = t.match(/\b(?:create|add|new)\s+(?:new\s+)?folder(?:\s+(?:called|named)\s+(.+))?$/i)
+                   || t.match(/\bתיקייה\s+(?:חדשה\s+)?(?:בשם\s+(.+))?$/i);
+      if (folderM) {
+        const name = (folderM[1] || '').trim();
+        if (name) createFolder(name);
+        else promptAddFolder();   // no name spoken → show input dialog
+        return;   // stay in command mode
       }
     }
   };
@@ -804,11 +803,8 @@ function esc(s) {
 }
 
 // ── SAVE / CLEAR ──────────────────────────────────────────────────────────────
-saveBtn.addEventListener('click', () => {
-  // Stop recording first — prevents the timer resetting to 0 mid-recording
-  // and ensures the mic is released before we save.
+function saveMemo() {
   if (S.recording) stopRec();
-
   const text = S.finalTx.trim();
   if (!text) return;
   const fid  = S.pendingFolder;
@@ -818,10 +814,12 @@ saveBtn.addEventListener('click', () => {
   recTimer.textContent = '00:00';
   renderTx(); saveBtn.disabled = clearBtn.disabled = true;
   renderFolderChips();
-  const folderName = fid ? (S.folders.find(f => f.id === fid)?.name || 'folder') : null;
-  renderMemos(); toast(folderName ? `Saved to "${folderName}"` : 'Memo saved');
+  const fname = fid ? (S.folders.find(f => f.id === fid)?.name || 'folder') : null;
+  renderMemos(); toast(fname ? `Saved to "${fname}"` : 'Memo saved');
   pushMemos();
-});
+}
+
+saveBtn.addEventListener('click', saveMemo);
 
 clearBtn.addEventListener('click', () => {
   S.finalTx = ''; S.interimTx = '';
@@ -1004,39 +1002,50 @@ function promptAddFolder(prefilled = '') {
 $('addFolderBtn').addEventListener('click', () => promptAddFolder());
 $('folderTabAll').addEventListener('click', () => { S.activeFolder = null; renderFolderBar(); renderMemos(); });
 
-// ── VOICE COMMAND: NEW FOLDER / SAVE IN ───────────────────────────────────────
+// ── VOICE COMMANDS (during recording) ─────────────────────────────────────────
+// Called for each final speech result while recording.
+// Returns true if the text was a command (strips it from transcript).
 function checkVoiceCommands(finalText) {
-  const t = finalText.trim();
+  const t  = finalText.trim();
+  const lo = t.toLowerCase();
 
-  // "new folder called [name]" — exact phrase the user specified
-  // Also accept loose variants: "create/add folder called [name]", Hebrew equiv
-  const addMatch = t.match(/\b(?:new|add|create)\s+folder\s+called\s+(.+)$/i)
-                || t.match(/\b(?:new|add|create)\s+folder\s+named\s+(.+)$/i)
-                || t.match(/\bתיקייה\s+(?:חדשה\s+)?(?:בשם\s+)?(.+)$/i);   // Hebrew
-  if (addMatch) {
-    const name = (addMatch[1] || '').trim();
+  // ── SAVE MEMO [to [folder] <name>] ────────────────────────────────────────
+  // "Save memo"  /  "Save memo to Work"  /  "Save memo to folder Work"
+  const saveCmd = lo.match(/^save\s+memo(?:\s+to(?:\s+folder)?\s+(.+))?$/)
+               || lo.match(/^שמור\s+תזכיר(?:\s+ב(.+))?$/);
+  if (saveCmd) {
+    const fname = (saveCmd[1] || '').trim();
+    if (fname) {
+      const f = S.folders.find(f => f.name.toLowerCase() === fname.toLowerCase());
+      if (f) setPendingFolder(f.id);
+      else toast(`No folder named "${fname}"`);
+    }
+    stripFromTranscript(t);
+    setTimeout(saveMemo, 80);   // slight delay so strip renders first
+    return true;
+  }
+
+  // ── CREATE / NEW FOLDER [called/named <name>] ──────────────────────────────
+  // "Create new folder called Work"  /  "New folder called Work"  /  "Add folder named Work"
+  const folderCmd = t.match(/\b(?:create|add|new)\s+(?:new\s+)?folder(?:\s+(?:called|named)\s+(.+))?$/i)
+                 || t.match(/\bתיקייה\s+(?:חדשה\s+)?(?:בשם\s+(.+))?$/i);
+  if (folderCmd) {
+    const name = (folderCmd[1] || '').trim();
     stripFromTranscript(t);
     if (name) createFolder(name);
     else promptAddFolder();
     return true;
   }
 
-  // "save in [folder name]" — exact phrase the user specified
-  // Also accept: "save to [name]", Hebrew "שמור ב[name]"
-  const saveMatch = t.match(/\bsave\s+in\s+(.+)$/i)
-                 || t.match(/\bsave\s+to\s+(.+)$/i)
+  // ── SAVE IN / SAVE TO <folder> (selects folder, doesn't save yet) ──────────
+  // "Save in Work"  /  "Save to Work"
+  const saveToCmd = t.match(/\bsave\s+(?:in|to)\s+(.+)$/i)
                  || t.match(/\bשמור\s+ב(.+)$/);
-  if (saveMatch) {
-    const name   = (saveMatch[1] || '').trim();
-    const folder = S.folders.find(f => f.name.toLowerCase() === name.toLowerCase());
-    if (folder) {
-      stripFromTranscript(t);
-      setPendingFolder(folder.id);
-      renderTx();
-      toast(`Will save in "${folder.name}"`);
-    } else if (name) {
-      toast(`No folder named "${name}"`);
-    }
+  if (saveToCmd) {
+    const name = (saveToCmd[1] || '').trim();
+    const f    = S.folders.find(f => f.name.toLowerCase() === name.toLowerCase());
+    if (f) { stripFromTranscript(t); setPendingFolder(f.id); renderTx(); toast(`Will save in "${f.name}"`); }
+    else if (name) toast(`No folder named "${name}"`);
     return true;
   }
 
@@ -1044,7 +1053,6 @@ function checkVoiceCommands(finalText) {
 }
 
 function stripFromTranscript(phrase) {
-  // Remove the command phrase from finalTx and re-render cleanly
   S.finalTx = S.finalTx.replace(phrase, '').replace(/\s{2,}/g, ' ').trim();
   if (S.finalTx) S.finalTx += ' ';
   renderTx();
