@@ -499,7 +499,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 2, minor: 10 };
+const VERSION = { major: 2, minor: 11 };
 const DB_KEY  = 'MAIN';   // single shared DB — all devices auto-connect
 const API     = 'https://voice-memo-avi.netlify.app/api/memos'; // absolute so GitHub Pages works too
 const SILENCE_MS = 5000;   // auto-stop after 5 s of silence
@@ -904,40 +904,50 @@ function promptAddFolder(prefilled = '') {
 $('addFolderBtn').addEventListener('click', () => promptAddFolder());
 $('folderTabAll').addEventListener('click', () => { S.activeFolder = null; renderFolderBar(); renderMemos(); });
 
-// ── VOICE COMMAND: ADD FOLDER / SAVE TO ───────────────────────────────────────
+// ── VOICE COMMAND: NEW FOLDER / SAVE IN ───────────────────────────────────────
 function checkVoiceCommands(finalText) {
-  // Match "add folder [name]" / "create folder [name]" (English + common Hebrew equiv)
-  const addMatch = finalText.match(/\b(?:add|create|new)\s+folder(?:\s+(.+))?$/i)
-                || finalText.match(/\bהוסף\s+תיקייה(?:\s+(.+))?$/);
+  const t = finalText.trim();
+
+  // "new folder called [name]" — exact phrase the user specified
+  // Also accept loose variants: "create/add folder called [name]", Hebrew equiv
+  const addMatch = t.match(/\b(?:new|add|create)\s+folder\s+called\s+(.+)$/i)
+                || t.match(/\b(?:new|add|create)\s+folder\s+named\s+(.+)$/i)
+                || t.match(/\bתיקייה\s+(?:חדשה\s+)?(?:בשם\s+)?(.+)$/i);   // Hebrew
   if (addMatch) {
     const name = (addMatch[1] || '').trim();
-    // Strip the command phrase from the transcript
-    S.finalTx = S.finalTx.replace(finalText, '').trim();
-    if (S.finalTx) S.finalTx += ' ';
-    renderTx();
+    stripFromTranscript(t);
     if (name) createFolder(name);
     else promptAddFolder();
     return true;
   }
 
-  // Match "save to [name]"
-  const saveToMatch = finalText.match(/\bsave\s+to\s+(.+)$/i)
-                   || finalText.match(/\bשמור\s+ב(?:\s+(.+))?$/);
-  if (saveToMatch) {
-    const name   = (saveToMatch[1] || '').trim();
+  // "save in [folder name]" — exact phrase the user specified
+  // Also accept: "save to [name]", Hebrew "שמור ב[name]"
+  const saveMatch = t.match(/\bsave\s+in\s+(.+)$/i)
+                 || t.match(/\bsave\s+to\s+(.+)$/i)
+                 || t.match(/\bשמור\s+ב(.+)$/);
+  if (saveMatch) {
+    const name   = (saveMatch[1] || '').trim();
     const folder = S.folders.find(f => f.name.toLowerCase() === name.toLowerCase());
     if (folder) {
-      S.finalTx = S.finalTx.replace(finalText, '').trim();
-      if (S.finalTx) S.finalTx += ' ';
+      stripFromTranscript(t);
       setPendingFolder(folder.id);
       renderTx();
-      toast(`Will save to "${folder.name}"`);
+      toast(`Will save in "${folder.name}"`);
     } else if (name) {
       toast(`No folder named "${name}"`);
     }
     return true;
   }
+
   return false;
+}
+
+function stripFromTranscript(phrase) {
+  // Remove the command phrase from finalTx and re-render cleanly
+  S.finalTx = S.finalTx.replace(phrase, '').replace(/\s{2,}/g, ' ').trim();
+  if (S.finalTx) S.finalTx += ' ';
+  renderTx();
 }
 
 // Init folder UI on load
