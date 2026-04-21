@@ -501,7 +501,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 2, minor: 13 };
+const VERSION = { major: 2, minor: 14 };
 const DB_KEY  = 'MAIN';   // single shared DB — all devices auto-connect
 const API     = 'https://voice-memo-avi.netlify.app/api/memos'; // absolute so GitHub Pages works too
 const SILENCE_MS = 5000;   // auto-stop after 5 s of silence
@@ -584,11 +584,24 @@ renderMemos();
 // ── AUTO-OPEN iPHONE PANEL ────────────────────────────────────────────────────
 if (isIOS) $('iphonePanel').setAttribute('open', '');
 
-// ── AUTOSTART (from URL param ?autostart=1) ───────────────────────────────────
-// Siri shortcut opens the app with ?autostart=1 → enter command-listening mode
-// instead of immediately recording, so user can choose what to do by voice.
-if (new URLSearchParams(location.search).get('autostart') === '1') {
-  setTimeout(() => startCmdMode(), 900);
+// ── AUTOSTART ─────────────────────────────────────────────────────────────────
+// iOS Safari requires mic access to be triggered INSIDE a click-event handler —
+// a plain setTimeout callback doesn't carry a user-gesture token and gets blocked.
+// Fix: route through recBtn.click() (synthetic DOM click = valid user gesture),
+// then the click handler detects the flag and calls startCmdMode() instead of startRec().
+//
+// On desktop Chrome: also attempt auto-activation after load — succeeds silently
+// if mic permission was already granted, fails silently if not.
+
+let _autostartPending = new URLSearchParams(location.search).get('autostart') === '1';
+
+if (_autostartPending) {
+  // Siri shortcut path: synthetic click satisfies iOS user-gesture requirement
+  setTimeout(() => recBtn.click(), 400);
+}
+if (!isIOS) {
+  // Desktop: try to activate command mode automatically after load
+  setTimeout(() => { if (!S.cmdListening && !S.recording) startCmdMode(); }, 800);
 }
 
 // ── COMMAND MODE ──────────────────────────────────────────────────────────────
@@ -684,7 +697,10 @@ function drawCmdWave() {
 
 // ── RECORD ────────────────────────────────────────────────────────────────────
 recBtn.addEventListener('click', () => {
-  if (S.cmdListening) stopCmdMode();   // exit command mode on manual tap
+  // Autostart path: first synthetic click from ?autostart=1 → enter command mode
+  if (_autostartPending) { _autostartPending = false; startCmdMode(); return; }
+  // Manual tap while in command mode → exit command mode and start recording
+  if (S.cmdListening)    { stopCmdMode(); startRec(); return; }
   S.recording ? stopRec() : startRec();
 });
 
