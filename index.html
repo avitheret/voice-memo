@@ -121,7 +121,8 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 .rec-info { flex: 1; min-width: 0; }
 .rec-label { font-size: 12px; letter-spacing: 0.06em; color: var(--text-dim); text-transform: uppercase; margin-bottom: 2px; font-weight: 700; }
-.rec-label.live { color: var(--red); animation: blink 1s step-end infinite; }
+.rec-label.live { color: var(--red);   animation: blink 1s step-end infinite; }
+.rec-label.cmd  { color: var(--green); animation: blink 1.4s step-end infinite; }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
 .rec-timer { font-family: var(--display); font-size: 44px; letter-spacing: 0.06em; line-height: 1; color: var(--text); }
 .rec-hint { font-size: 11px; color: var(--text-faint); letter-spacing: 0.03em; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
@@ -278,6 +279,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); display: inline-block; margin-right: 6px; }
 .dot.on  { background: var(--green); box-shadow: 0 0 7px rgba(74,140,92,0.5); animation: pulse 2s infinite; }
 .dot.err { background: var(--red); }
+.dot.cmd { background: var(--green); animation: pulse 1.2s infinite; }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
 /* ── TOAST ──────────────────────── */
@@ -499,7 +501,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 2, minor: 11 };
+const VERSION = { major: 2, minor: 12 };
 const DB_KEY  = 'MAIN';   // single shared DB — all devices auto-connect
 const API     = 'https://voice-memo-avi.netlify.app/api/memos'; // absolute so GitHub Pages works too
 const SILENCE_MS = 5000;   // auto-stop after 5 s of silence
@@ -520,6 +522,7 @@ const S = {
   idlePhase:    0,
   silenceTimer:  null,
   lang:          localStorage.getItem('vmLang') || 'en-US',
+  cmdListening:  false,
   folders:       JSON.parse(localStorage.getItem('voiceFolders') || '[]'),
   activeFolder:  null,   // null = all; folder id = filtered view
   pendingFolder: null,   // folder id chosen before saving; null = unfiled
@@ -582,12 +585,109 @@ renderMemos();
 if (isIOS) $('iphonePanel').setAttribute('open', '');
 
 // ── AUTOSTART (from URL param ?autostart=1) ───────────────────────────────────
+// Siri shortcut opens the app with ?autostart=1 → enter command-listening mode
+// instead of immediately recording, so user can choose what to do by voice.
 if (new URLSearchParams(location.search).get('autostart') === '1') {
-  setTimeout(() => recBtn.click(), 900);
+  setTimeout(() => startCmdMode(), 900);
+}
+
+// ── COMMAND MODE ──────────────────────────────────────────────────────────────
+// Passive voice-command listener. Activated by ?autostart=1 (Siri shortcut).
+// Hears "Record" → starts recording.  "Create New Folder Called [X]" → creates folder.
+// Does NOT record audio — just listens for commands.
+
+let cmdRecognition = null;
+
+function startCmdMode() {
+  if (!SR || S.recording || S.cmdListening) return;
+  S.cmdListening = true;
+
+  cmdRecognition = new SR();
+  cmdRecognition.continuous     = true;
+  cmdRecognition.interimResults = false;   // only final results needed for commands
+  cmdRecognition.lang           = S.lang;
+
+  cmdRecognition.onresult = e => {
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (!e.results[i].isFinal) continue;
+      const t = (e.results[i][0]?.transcript ?? '').trim();
+      const lo = t.toLowerCase();
+
+      // ── "Record" / "הקלט" ──────────────────────────────────────────────────
+      if (/^\s*record\s*$/i.test(lo) || /^הקלט$/.test(lo)) {
+        stopCmdMode();
+        startRec();
+        return;
+      }
+
+      // ── "Create New Folder Called [name]" ─────────────────────────────────
+      const m = lo.match(/(?:create|add|new)\s+(?:new\s+)?folder\s+called\s+(.+)/i)
+             || lo.match(/(?:create|add|new)\s+(?:new\s+)?folder\s+named\s+(.+)/i)
+             || lo.match(/תיקייה\s+(?:חדשה\s+)?(?:בשם\s+)?(.+)/);
+      if (m) {
+        createFolder(m[1].trim());
+        // Stay in command mode after creating a folder
+        return;
+      }
+    }
+  };
+
+  cmdRecognition.onerror = e => {
+    if (e.error === 'no-speech' || e.error === 'aborted') return;
+    console.warn('cmd error:', e.error);
+  };
+
+  cmdRecognition.onend = () => {
+    if (S.cmdListening) try { cmdRecognition.start(); } catch(_) {}
+  };
+
+  try { cmdRecognition.start(); } catch(e) { S.cmdListening = false; return; }
+
+  recBtn.classList.add('cmd-mode');
+  recLabel.textContent = '● LISTENING';
+  recLabel.classList.add('cmd');
+  recHint.textContent  = 'Say "Record"  or  "Create New Folder Called [name]"';
+  vizWrap.classList.add('active');
+  vizLabel.textContent = 'COMMAND MODE';
+  setStatus('cmd', 'COMMAND MODE');
+  drawCmdWave();
+}
+
+function stopCmdMode() {
+  S.cmdListening = false;
+  if (cmdRecognition) { try { cmdRecognition.abort(); } catch(_) {} cmdRecognition = null; }
+  cancelAnimationFrame(S.raf);
+
+  recBtn.classList.remove('cmd-mode');
+  recLabel.textContent = 'READY';
+  recLabel.classList.remove('cmd');
+  recHint.textContent  = 'CLICK TO BEGIN RECORDING';
+  vizWrap.classList.remove('active');
+  vizLabel.textContent = 'AUDIO INPUT';
+  setStatus('', 'IDLE');
+  drawIdle();
+}
+
+function drawCmdWave() {
+  if (!S.cmdListening) return;
+  S.raf = requestAnimationFrame(drawCmdWave);
+  S.idlePhase += 0.04;
+  const W = canvas.offsetWidth, H = canvas.offsetHeight;
+  cx.clearRect(0, 0, W, H);
+  const N = 56, bw = (W/N)*0.55, gap = (W/N)*0.45;
+  for (let i = 0; i < N; i++) {
+    const v = (Math.sin(i * 0.3 + S.idlePhase) * 0.4 + 0.45) * 0.6;
+    const bh = Math.max(2, v * H * 0.65), x = i*(bw+gap)+gap/2, y = (H-bh)/2;
+    cx.fillStyle = `rgba(74,140,92,${0.25+v*0.55})`;
+    cx.fillRect(x, y, bw, bh);
+  }
 }
 
 // ── RECORD ────────────────────────────────────────────────────────────────────
-recBtn.addEventListener('click', () => S.recording ? stopRec() : startRec());
+recBtn.addEventListener('click', () => {
+  if (S.cmdListening) stopCmdMode();   // exit command mode on manual tap
+  S.recording ? stopRec() : startRec();
+});
 
 async function startRec() {
   if (!SR || S.recording) return;
@@ -1032,7 +1132,7 @@ function drawIdle() {
 function fmt(s) { return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; }
 
 function setStatus(type, text) {
-  statusDot.className = 'dot' + (type==='on'?' on':type==='err'?' err':type==='wake'?' wake':'');
+  statusDot.className = 'dot' + (type==='on'?' on':type==='err'?' err':type==='cmd'?' cmd':'');
   statusText.textContent = text;
 }
 
