@@ -501,7 +501,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 2, minor: 14 };
+const VERSION = { major: 2, minor: 15 };
 const DB_KEY  = 'MAIN';   // single shared DB — all devices auto-connect
 const API     = 'https://voice-memo-avi.netlify.app/api/memos'; // absolute so GitHub Pages works too
 const SILENCE_MS = 5000;   // auto-stop after 5 s of silence
@@ -617,28 +617,31 @@ function startCmdMode() {
 
   cmdRecognition = new SR();
   cmdRecognition.continuous     = true;
-  cmdRecognition.interimResults = false;   // only final results needed for commands
+  cmdRecognition.interimResults = true;  // true = results arrive fast; we still only ACT on final
   cmdRecognition.lang           = S.lang;
 
   cmdRecognition.onresult = e => {
     for (let i = e.resultIndex; i < e.results.length; i++) {
-      if (!e.results[i].isFinal) continue;
+      if (!e.results[i].isFinal) continue;   // ignore interim; wait for confirmed text
+
       const t  = (e.results[i][0]?.transcript ?? '').trim();
-      const lo = t.toLowerCase();
+      // Strip trailing punctuation iOS adds (period, comma, exclamation)
+      const lo = t.toLowerCase().replace(/[.,!?;:]+$/, '').trim();
 
       // ── "Record" → start recording ─────────────────────────────────────────
-      if (/^record$/i.test(lo) || /^הקלט$/.test(lo)) {
-        stopCmdMode(); startRec(); return;
+      if (lo === 'record' || lo === 'הקלט') {
+        stopCmdMode();
+        setTimeout(() => startRec(), 150);  // brief gap so cmd mic fully releases
+        return;
       }
 
       // ── "Create / New / Add [new] folder [called/named <name>]" ──────────
-      // Accepts: "Create new folder"  /  "New folder called Work"  /  "Add folder named Work"
-      const folderM = t.match(/\b(?:create|add|new)\s+(?:new\s+)?folder(?:\s+(?:called|named)\s+(.+))?$/i)
-                   || t.match(/\bתיקייה\s+(?:חדשה\s+)?(?:בשם\s+(.+))?$/i);
+      const folderM = t.match(/\b(?:create|add|new)\s+(?:new\s+)?folder(?:\s+(?:called|named)\s+(.+?))[.,!?]*$/i)
+                   || t.match(/\bתיקייה\s+(?:חדשה\s+)?(?:בשם\s+(.+?))[.,!?]*$/i);
       if (folderM) {
         const name = (folderM[1] || '').trim();
         if (name) createFolder(name);
-        else promptAddFolder();   // no name spoken → show input dialog
+        else promptAddFolder();
         return;   // stay in command mode
       }
     }
