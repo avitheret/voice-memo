@@ -121,8 +121,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 .rec-info { flex: 1; min-width: 0; }
 .rec-label { font-size: 12px; letter-spacing: 0.06em; color: var(--text-dim); text-transform: uppercase; margin-bottom: 2px; font-weight: 700; }
-.rec-label.live { color: var(--red);   animation: blink 1s step-end infinite; }
-.rec-label.cmd  { color: var(--green); animation: blink 1.4s step-end infinite; }
+.rec-label.live { color: var(--red); animation: blink 1s step-end infinite; }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
 .rec-timer { font-family: var(--display); font-size: 44px; letter-spacing: 0.06em; line-height: 1; color: var(--text); }
 .rec-hint { font-size: 11px; color: var(--text-faint); letter-spacing: 0.03em; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
@@ -279,7 +278,6 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); display: inline-block; margin-right: 6px; }
 .dot.on  { background: var(--green); box-shadow: 0 0 7px rgba(74,140,92,0.5); animation: pulse 2s infinite; }
 .dot.err { background: var(--red); }
-.dot.cmd { background: var(--green); animation: pulse 1.2s infinite; }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
 /* ── TOAST ──────────────────────── */
@@ -351,26 +349,6 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 }
 .folder-chip:hover  { border-color: var(--amber-dim); color: var(--text); }
 .folder-chip.sel    { background: var(--amber); color: var(--bg); border-color: var(--amber); }
-
-/* ── MODAL ──────────────────────── */
-.sync-modal-bg {
-  position: fixed; inset: 0; z-index: 600;
-  background: rgba(17,15,10,0.55); display: flex; align-items: center; justify-content: center;
-}
-.sync-modal {
-  background: var(--surface); border: 1px solid var(--border-hi);
-  padding: 28px 30px; min-width: 280px; display: flex; flex-direction: column; gap: 16px;
-}
-.sync-modal-title {
-  font-family: var(--display); font-size: 28px; letter-spacing: 0.1em; color: var(--amber);
-}
-.sync-modal-input {
-  padding: 10px 14px; font-family: var(--mono); font-size: 14px; font-weight: 700;
-  border: 1px solid var(--border-hi); background: var(--surface2); color: var(--text);
-  outline: none; border-radius: 2px;
-}
-.sync-modal-input:focus { border-color: var(--amber-dim); }
-.sync-modal-row { display: flex; gap: 10px; }
 
 /* ── RESPONSIVE ─────────────────── */
 @media (max-width: 700px) {
@@ -453,19 +431,16 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
           <!-- Tab: Siri Shortcut -->
           <div class="setup-content active" id="tab-shortcut">
-            <p class="setup-intro">100% hands-free. Say <strong>"Hey Siri, Add New Tracking"</strong> → speak your memo → pause → saved silently. No tapping, no app opening needed.</p>
+            <p class="setup-intro">Opens this app from Siri. Say <strong>"Hey Siri, Record"</strong> — recording starts automatically. Works with AirPods or any Bluetooth mic.</p>
             <div class="steps">
-              <div class="step"><div class="step-n">1</div><div class="step-text">Open the <strong>Shortcuts</strong> app → tap <code>+</code> → rename it <code>Add New Tracking</code>.</div></div>
-              <div class="step"><div class="step-n">2</div><div class="step-text">Tap <strong>Add Action</strong> → search <code>Dictate Text</code> → select it. Language: <strong>English</strong>, stops: <strong>After Pause</strong>.</div></div>
-              <div class="step"><div class="step-n">3</div><div class="step-text">Tap <code>+</code> → search <code>Get Contents of URL</code> → select it.<br>
-                • URL: <code>https://voice-memo-avi.netlify.app/api/save</code><br>
-                • Method: <strong>POST</strong><br>
-                • Request Body: <strong>JSON</strong><br>
-                • Add field: key <code>text</code>, value → tap variable chip → <strong>Dictated Text</strong>
-              </div></div>
-              <div class="step"><div class="step-n">4</div><div class="step-text">Tap <strong>Done</strong>. That's it — say <strong>"Hey Siri, Add New Tracking"</strong>, speak, pause, done. The memo syncs to every device instantly.</div></div>
+              <div class="step"><div class="step-n">1</div><div class="step-text">Host this file on <strong>GitHub Pages</strong>, Netlify, or any web server — note the URL.</div></div>
+              <div class="step"><div class="step-n">2</div><div class="step-text">On iPhone, open the <strong>Shortcuts</strong> app → tap <code>+</code> to create a new shortcut.</div></div>
+              <div class="step"><div class="step-n">3</div><div class="step-text">Tap the shortcut name at the top → rename it <code>Record</code>.</div></div>
+              <div class="step"><div class="step-n">4</div><div class="step-text">Tap <strong>Add Action</strong> → search <code>Open URLs</code> → select it.</div></div>
+              <div class="step"><div class="step-n">5</div><div class="step-text">Set the URL to <code>https://avitheret.github.io/voice-memo/?autostart=1</code></div></div>
+              <div class="step"><div class="step-n">6</div><div class="step-text">Tap <strong>Done</strong>. Now say <strong>"Hey Siri, Record"</strong> — the app opens and starts recording immediately.</div></div>
             </div>
-            <p class="setup-note" style="margin-top:10px">To save to a folder, add a second JSON field: key <code>folder</code>, value = your folder name (e.g. <code>Work</code>). On desktop Chrome/Edge, command mode activates automatically — no setup needed.</p>
+            <p class="setup-note" style="margin-top:10px">On desktop (Chrome/Edge), use the <strong>wake word button</strong> above instead — no Siri needed.</p>
           </div>
 
           <!-- Tab: Standalone -->
@@ -479,7 +454,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
               <div class="step"><div class="step-n">5</div><div class="step-text">Add action: <code>Get File</code> → iCloud Drive → <code>Voice Memos.txt</code>. Enable <strong>Error If Not Found: OFF</strong>.</div></div>
               <div class="step"><div class="step-n">6</div><div class="step-text">Add action: <code>Combine Text</code> → combine [File Contents] + [Text from step 4], separator: <strong>New Lines</strong>.</div></div>
               <div class="step"><div class="step-n">7</div><div class="step-text">Add action: <code>Save File</code> → iCloud Drive → filename <code>Voice Memos.txt</code>, <strong>Overwrite: ON</strong>.</div></div>
-              <div class="step"><div class="step-n">8</div><div class="step-text">Tap <strong>Done</strong>. Say <strong>"Hey Siri, Add New Tracking"</strong> — iPhone records, transcribes, and appends to your file.</div></div>
+              <div class="step"><div class="step-n">8</div><div class="step-text">Tap <strong>Done</strong>. Say <strong>"Hey Siri, Record"</strong> — iPhone records, transcribes, and appends to your file.</div></div>
             </div>
             <p class="setup-note" style="margin-top:10px">Your memos accumulate in <strong>iCloud Drive → Voice Memos.txt</strong>, visible in the Files app on all devices.</p>
           </div>
@@ -524,7 +499,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 2, minor: 19 };
+const VERSION = { major: 2, minor: 11 };
 const DB_KEY  = 'MAIN';   // single shared DB — all devices auto-connect
 const API     = 'https://voice-memo-avi.netlify.app/api/memos'; // absolute so GitHub Pages works too
 const SILENCE_MS = 5000;   // auto-stop after 5 s of silence
@@ -545,7 +520,6 @@ const S = {
   idlePhase:    0,
   silenceTimer:  null,
   lang:          localStorage.getItem('vmLang') || 'en-US',
-  cmdListening:  false,
   folders:       JSON.parse(localStorage.getItem('voiceFolders') || '[]'),
   activeFolder:  null,   // null = all; folder id = filtered view
   pendingFolder: null,   // folder id chosen before saving; null = unfiled
@@ -586,7 +560,7 @@ if (!SR) {
   recBtn.disabled = true;
   setStatus('err', 'UNSUPPORTED BROWSER');
 } else if (isIOS) {
-  browserNote.textContent = 'Say "Hey Siri, Add New Tracking" to start — see setup panel below';
+  browserNote.textContent = 'Say "Hey Siri, Record" to start — see setup panel below';
   setStatus('', 'IDLE');
 } else {
   setStatus('', 'IDLE');
@@ -607,116 +581,13 @@ renderMemos();
 // ── AUTO-OPEN iPHONE PANEL ────────────────────────────────────────────────────
 if (isIOS) $('iphonePanel').setAttribute('open', '');
 
-// ── DESKTOP AUTO-START COMMAND MODE ──────────────────────────────────────────
-// On desktop Chrome/Edge, mic permission persists → command mode auto-activates.
-// On iOS Safari, SpeechRecognition.start() requires a genuine touch event (Apple
-// security policy) — so command mode is started by the record button tap instead.
-if (!isIOS) {
-  setTimeout(() => { if (!S.cmdListening && !S.recording) startCmdMode(); }, 500);
-}
-
-// ── COMMAND MODE ──────────────────────────────────────────────────────────────
-// Passive voice-command listener. Activated by ?autostart=1 (Siri shortcut).
-// Hears "Record" → starts recording.  "Create New Folder Called [X]" → creates folder.
-// Does NOT record audio — just listens for commands.
-
-let cmdRecognition = null;
-
-function startCmdMode() {
-  if (!SR || S.recording || S.cmdListening) return;
-  S.cmdListening = true;
-
-  cmdRecognition = new SR();
-  cmdRecognition.continuous     = true;
-  cmdRecognition.interimResults = true;  // true = results arrive fast; we still only ACT on final
-  cmdRecognition.lang           = S.lang;
-
-  cmdRecognition.onresult = e => {
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      if (!e.results[i].isFinal) continue;   // ignore interim; wait for confirmed text
-
-      const t  = (e.results[i][0]?.transcript ?? '').trim();
-      // Strip trailing punctuation iOS adds (period, comma, exclamation)
-      const lo = t.toLowerCase().replace(/[.,!?;:]+$/, '').trim();
-
-      // ── "Record" → start recording ─────────────────────────────────────────
-      if (lo === 'record' || lo === 'הקלט') {
-        stopCmdMode();
-        setTimeout(() => startRec(), 150);  // brief gap so cmd mic fully releases
-        return;
-      }
-
-      // ── "Create / New / Add [new] folder [called/named <name>]" ──────────
-      const folderM = t.match(/\b(?:create|add|new)\s+(?:new\s+)?folder(?:\s+(?:called|named)\s+(.+?))[.,!?]*$/i)
-                   || t.match(/\bתיקייה\s+(?:חדשה\s+)?(?:בשם\s+(.+?))[.,!?]*$/i);
-      if (folderM) {
-        const name = (folderM[1] || '').trim();
-        if (name) createFolder(name);
-        else promptAddFolder();
-        return;   // stay in command mode
-      }
-    }
-  };
-
-  cmdRecognition.onerror = e => {
-    if (e.error === 'no-speech' || e.error === 'aborted') return;
-    console.warn('cmd error:', e.error);
-  };
-
-  cmdRecognition.onend = () => {
-    if (S.cmdListening) try { cmdRecognition.start(); } catch(_) {}
-  };
-
-  try { cmdRecognition.start(); } catch(e) { S.cmdListening = false; return; }
-
-  recBtn.classList.add('cmd-mode');
-  recLabel.textContent = '● LISTENING';
-  recLabel.classList.add('cmd');
-  recHint.textContent  = 'Say "Record"  or  "Create New Folder Called [name]"';
-  vizWrap.classList.add('active');
-  vizLabel.textContent = 'COMMAND MODE';
-  setStatus('cmd', 'COMMAND MODE');
-  drawCmdWave();
-}
-
-function stopCmdMode() {
-  S.cmdListening = false;
-  if (cmdRecognition) { try { cmdRecognition.abort(); } catch(_) {} cmdRecognition = null; }
-  cancelAnimationFrame(S.raf);
-
-  recBtn.classList.remove('cmd-mode');
-  recLabel.textContent = 'READY';
-  recLabel.classList.remove('cmd');
-  recHint.textContent  = 'CLICK TO BEGIN RECORDING';
-  vizWrap.classList.remove('active');
-  vizLabel.textContent = 'AUDIO INPUT';
-  setStatus('', 'IDLE');
-  drawIdle();
-}
-
-function drawCmdWave() {
-  if (!S.cmdListening) return;
-  S.raf = requestAnimationFrame(drawCmdWave);
-  S.idlePhase += 0.04;
-  const W = canvas.offsetWidth, H = canvas.offsetHeight;
-  cx.clearRect(0, 0, W, H);
-  const N = 56, bw = (W/N)*0.55, gap = (W/N)*0.45;
-  for (let i = 0; i < N; i++) {
-    const v = (Math.sin(i * 0.3 + S.idlePhase) * 0.4 + 0.45) * 0.6;
-    const bh = Math.max(2, v * H * 0.65), x = i*(bw+gap)+gap/2, y = (H-bh)/2;
-    cx.fillStyle = `rgba(74,140,92,${0.25+v*0.55})`;
-    cx.fillRect(x, y, bw, bh);
-  }
+// ── AUTOSTART (from URL param ?autostart=1) ───────────────────────────────────
+if (new URLSearchParams(location.search).get('autostart') === '1') {
+  setTimeout(() => recBtn.click(), 900);
 }
 
 // ── RECORD ────────────────────────────────────────────────────────────────────
-recBtn.addEventListener('click', () => {
-  // On iOS: first tap activates command mode (mic needs real touch event).
-  // On desktop: command mode is already running; tap starts recording.
-  if (isIOS && !S.cmdListening && !S.recording) { startCmdMode(); return; }
-  if (S.cmdListening) { stopCmdMode(); startRec(); return; }
-  S.recording ? stopRec() : startRec();
-});
+recBtn.addEventListener('click', () => S.recording ? stopRec() : startRec());
 
 async function startRec() {
   if (!SR || S.recording) return;
@@ -833,8 +704,11 @@ function esc(s) {
 }
 
 // ── SAVE / CLEAR ──────────────────────────────────────────────────────────────
-function saveMemo() {
+saveBtn.addEventListener('click', () => {
+  // Stop recording first — prevents the timer resetting to 0 mid-recording
+  // and ensures the mic is released before we save.
   if (S.recording) stopRec();
+
   const text = S.finalTx.trim();
   if (!text) return;
   const fid  = S.pendingFolder;
@@ -844,12 +718,10 @@ function saveMemo() {
   recTimer.textContent = '00:00';
   renderTx(); saveBtn.disabled = clearBtn.disabled = true;
   renderFolderChips();
-  const fname = fid ? (S.folders.find(f => f.id === fid)?.name || 'folder') : null;
-  renderMemos(); toast(fname ? `Saved to "${fname}"` : 'Memo saved');
+  const folderName = fid ? (S.folders.find(f => f.id === fid)?.name || 'folder') : null;
+  renderMemos(); toast(folderName ? `Saved to "${folderName}"` : 'Memo saved');
   pushMemos();
-}
-
-saveBtn.addEventListener('click', saveMemo);
+});
 
 clearBtn.addEventListener('click', () => {
   S.finalTx = ''; S.interimTx = '';
@@ -1032,50 +904,39 @@ function promptAddFolder(prefilled = '') {
 $('addFolderBtn').addEventListener('click', () => promptAddFolder());
 $('folderTabAll').addEventListener('click', () => { S.activeFolder = null; renderFolderBar(); renderMemos(); });
 
-// ── VOICE COMMANDS (during recording) ─────────────────────────────────────────
-// Called for each final speech result while recording.
-// Returns true if the text was a command (strips it from transcript).
+// ── VOICE COMMAND: NEW FOLDER / SAVE IN ───────────────────────────────────────
 function checkVoiceCommands(finalText) {
-  const t  = finalText.trim();
-  const lo = t.toLowerCase();
+  const t = finalText.trim();
 
-  // ── SAVE MEMO [to [folder] <name>] ────────────────────────────────────────
-  // "Save memo"  /  "Save memo to Work"  /  "Save memo to folder Work"
-  const saveCmd = lo.match(/^save\s+memo(?:\s+to(?:\s+folder)?\s+(.+))?$/)
-               || lo.match(/^שמור\s+תזכיר(?:\s+ב(.+))?$/);
-  if (saveCmd) {
-    const fname = (saveCmd[1] || '').trim();
-    if (fname) {
-      const f = S.folders.find(f => f.name.toLowerCase() === fname.toLowerCase());
-      if (f) setPendingFolder(f.id);
-      else toast(`No folder named "${fname}"`);
-    }
-    stripFromTranscript(t);
-    setTimeout(saveMemo, 80);   // slight delay so strip renders first
-    return true;
-  }
-
-  // ── CREATE / NEW FOLDER [called/named <name>] ──────────────────────────────
-  // "Create new folder called Work"  /  "New folder called Work"  /  "Add folder named Work"
-  const folderCmd = t.match(/\b(?:create|add|new)\s+(?:new\s+)?folder(?:\s+(?:called|named)\s+(.+))?$/i)
-                 || t.match(/\bתיקייה\s+(?:חדשה\s+)?(?:בשם\s+(.+))?$/i);
-  if (folderCmd) {
-    const name = (folderCmd[1] || '').trim();
+  // "new folder called [name]" — exact phrase the user specified
+  // Also accept loose variants: "create/add folder called [name]", Hebrew equiv
+  const addMatch = t.match(/\b(?:new|add|create)\s+folder\s+called\s+(.+)$/i)
+                || t.match(/\b(?:new|add|create)\s+folder\s+named\s+(.+)$/i)
+                || t.match(/\bתיקייה\s+(?:חדשה\s+)?(?:בשם\s+)?(.+)$/i);   // Hebrew
+  if (addMatch) {
+    const name = (addMatch[1] || '').trim();
     stripFromTranscript(t);
     if (name) createFolder(name);
     else promptAddFolder();
     return true;
   }
 
-  // ── SAVE IN / SAVE TO <folder> (selects folder, doesn't save yet) ──────────
-  // "Save in Work"  /  "Save to Work"
-  const saveToCmd = t.match(/\bsave\s+(?:in|to)\s+(.+)$/i)
+  // "save in [folder name]" — exact phrase the user specified
+  // Also accept: "save to [name]", Hebrew "שמור ב[name]"
+  const saveMatch = t.match(/\bsave\s+in\s+(.+)$/i)
+                 || t.match(/\bsave\s+to\s+(.+)$/i)
                  || t.match(/\bשמור\s+ב(.+)$/);
-  if (saveToCmd) {
-    const name = (saveToCmd[1] || '').trim();
-    const f    = S.folders.find(f => f.name.toLowerCase() === name.toLowerCase());
-    if (f) { stripFromTranscript(t); setPendingFolder(f.id); renderTx(); toast(`Will save in "${f.name}"`); }
-    else if (name) toast(`No folder named "${name}"`);
+  if (saveMatch) {
+    const name   = (saveMatch[1] || '').trim();
+    const folder = S.folders.find(f => f.name.toLowerCase() === name.toLowerCase());
+    if (folder) {
+      stripFromTranscript(t);
+      setPendingFolder(folder.id);
+      renderTx();
+      toast(`Will save in "${folder.name}"`);
+    } else if (name) {
+      toast(`No folder named "${name}"`);
+    }
     return true;
   }
 
@@ -1083,6 +944,7 @@ function checkVoiceCommands(finalText) {
 }
 
 function stripFromTranscript(phrase) {
+  // Remove the command phrase from finalTx and re-render cleanly
   S.finalTx = S.finalTx.replace(phrase, '').replace(/\s{2,}/g, ' ').trim();
   if (S.finalTx) S.finalTx += ' ';
   renderTx();
@@ -1170,7 +1032,7 @@ function drawIdle() {
 function fmt(s) { return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; }
 
 function setStatus(type, text) {
-  statusDot.className = 'dot' + (type==='on'?' on':type==='err'?' err':type==='cmd'?' cmd':'');
+  statusDot.className = 'dot' + (type==='on'?' on':type==='err'?' err':type==='wake'?' wake':'');
   statusText.textContent = text;
 }
 
