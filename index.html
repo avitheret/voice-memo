@@ -499,7 +499,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 2, minor: 13 };
+const VERSION = { major: 2, minor: 14 };
 const DB_KEY  = 'MAIN';   // single shared DB — all devices auto-connect
 const API     = 'https://voice-memo-avi.netlify.app/api/memos'; // absolute so GitHub Pages works too
 const SILENCE_MS = 3000;   // auto-stop after 3 s of silence
@@ -922,7 +922,7 @@ function checkVoiceCommands(finalText) {
   }
 
   // ── SAVE TO FOLDER ─────────────────────────────────────────────────────────
-  // Stops recording and saves immediately to the named folder.
+  // Stops recording and saves immediately.
   // Accepted:  "save to Work"        "save in Work"
   //            "save to folder Work" "save in folder Work"
   //            "add to Work"         "add in Work"
@@ -931,14 +931,17 @@ function checkVoiceCommands(finalText) {
   const saveToMatch = tn.match(/\b(?:save|add)\s+(?:to|in)\s+(?:folder\s+)?(.+)$/i)
                    || tn.match(/\bשמור\s+ב(.+)$/);
   if (saveToMatch) {
-    const name   = (saveToMatch[1] || '').trim();
+    // Strip trailing punctuation the recogniser sometimes appends
+    const name   = (saveToMatch[1] || '').replace(/[.,!?;:]+$/, '').trim();
     const folder = S.folders.find(f => f.name.toLowerCase() === name.toLowerCase());
+    stripFromTranscript(t);
     if (folder) {
-      stripFromTranscript(t);
       setPendingFolder(folder.id);
-      setTimeout(saveMemo, 80);   // stop recording + save to folder
-    } else if (name) {
-      toast(`No folder named "${name}"`);
+      setTimeout(saveMemo, 80);
+    } else {
+      // Folder not found — save unfiled so recording always stops
+      if (name) toast(`Folder "${name}" not found — saving unfiled`);
+      setTimeout(saveMemo, 80);
     }
     return true;
   }
