@@ -499,10 +499,10 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 2, minor: 12 };
+const VERSION = { major: 2, minor: 13 };
 const DB_KEY  = 'MAIN';   // single shared DB — all devices auto-connect
 const API     = 'https://voice-memo-avi.netlify.app/api/memos'; // absolute so GitHub Pages works too
-const SILENCE_MS = 5000;   // auto-stop after 5 s of silence
+const SILENCE_MS = 3000;   // auto-stop after 3 s of silence
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
 const S = {
@@ -921,8 +921,8 @@ function checkVoiceCommands(finalText) {
     return true;
   }
 
-  // ── SELECT DESTINATION FOLDER ──────────────────────────────────────────────
-  // Works at the START or END of recording — sets the folder for the next save.
+  // ── SAVE TO FOLDER ─────────────────────────────────────────────────────────
+  // Stops recording and saves immediately to the named folder.
   // Accepted:  "save to Work"        "save in Work"
   //            "save to folder Work" "save in folder Work"
   //            "add to Work"         "add in Work"
@@ -936,8 +936,7 @@ function checkVoiceCommands(finalText) {
     if (folder) {
       stripFromTranscript(t);
       setPendingFolder(folder.id);
-      renderTx();
-      toast(`Will save in "${folder.name}"`);
+      setTimeout(saveMemo, 80);   // stop recording + save to folder
     } else if (name) {
       toast(`No folder named "${name}"`);
     }
