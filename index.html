@@ -499,7 +499,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 2, minor: 14 };
+const VERSION = { major: 2, minor: 15 };
 const DB_KEY  = 'MAIN';   // single shared DB — all devices auto-connect
 const API     = 'https://voice-memo-avi.netlify.app/api/memos'; // absolute so GitHub Pages works too
 const SILENCE_MS = 3000;   // auto-stop after 3 s of silence
@@ -661,12 +661,28 @@ function stopRec(autoStopped = false) {
   S.recording = false;
 
   clearTimeout(S.silenceTimer); S.silenceTimer = null;
+
+  // Grab any unfinished interim text BEFORE the recogniser shuts down.
+  // The Speech API discards interim results on .stop() without making them final,
+  // so we must handle them here — otherwise voice commands said at the end are lost.
+  const pendingInterim = S.interimTx.trim();
+  S.interimTx = '';
+
   if (S.recognition) { S.recognition.stop(); S.recognition = null; }
   if (S.stream)      { S.stream.getTracks().forEach(t => t.stop()); S.stream = null; }
   if (S.audioCtx)    { S.audioCtx.close(); S.audioCtx = null; S.analyser = null; }
 
   clearInterval(S.timerID);
   cancelAnimationFrame(S.raf);
+
+  // Process pending interim: run it through command detection first;
+  // if it's not a command, append it to the transcript as plain text.
+  if (pendingInterim) {
+    if (!checkVoiceCommands(pendingInterim)) {
+      S.finalTx += pendingInterim + ' ';
+    }
+    // checkVoiceCommands may have queued saveMemo() — let that run before updating UI
+  }
 
   recBtn.classList.remove('recording');
   vizWrap.classList.remove('active');
@@ -677,7 +693,7 @@ function stopRec(autoStopped = false) {
   const hasText = S.finalTx.trim().length > 0;
   saveBtn.disabled  = !hasText;
   clearBtn.disabled = !hasText;
-  if (!hasText && !S.interimTx.trim()) renderTx();
+  renderTx();
 
   setStatus('', 'IDLE');
   drawIdle();
