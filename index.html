@@ -499,7 +499,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 2, minor: 11 };
+const VERSION = { major: 2, minor: 12 };
 const DB_KEY  = 'MAIN';   // single shared DB — all devices auto-connect
 const API     = 'https://voice-memo-avi.netlify.app/api/memos'; // absolute so GitHub Pages works too
 const SILENCE_MS = 5000;   // auto-stop after 5 s of silence
@@ -906,28 +906,32 @@ $('folderTabAll').addEventListener('click', () => { S.activeFolder = null; rende
 
 // ── VOICE COMMAND: NEW FOLDER / SAVE IN ───────────────────────────────────────
 function checkVoiceCommands(finalText) {
-  const t = finalText.trim();
+  const t  = finalText.trim();
+  // Normalise common speech-recognition mishear: "safe" → "save"
+  const tn = t.replace(/\bsafe\b/gi, 'save');
 
-  // "new folder called [name]" — exact phrase the user specified
-  // Also accept loose variants: "create/add folder called [name]", Hebrew equiv
-  const addMatch = t.match(/\b(?:new|add|create)\s+folder\s+called\s+(.+)$/i)
-                || t.match(/\b(?:new|add|create)\s+folder\s+named\s+(.+)$/i)
-                || t.match(/\bתיקייה\s+(?:חדשה\s+)?(?:בשם\s+)?(.+)$/i);   // Hebrew
+  // ── CREATE FOLDER ──────────────────────────────────────────────────────────
+  // "new/create/add folder called/named [name]"
+  const addMatch = tn.match(/\b(?:new|add|create)\s+(?:new\s+)?folder\s+(?:called|named)\s+(.+)$/i)
+                || tn.match(/\bתיקייה\s+(?:חדשה\s+)?(?:בשם\s+)?(.+)$/i);
   if (addMatch) {
     const name = (addMatch[1] || '').trim();
     stripFromTranscript(t);
-    if (name) createFolder(name);
-    else promptAddFolder();
+    if (name) createFolder(name); else promptAddFolder();
     return true;
   }
 
-  // "save in [folder name]" — exact phrase the user specified
-  // Also accept: "save to [name]", Hebrew "שמור ב[name]"
-  const saveMatch = t.match(/\bsave\s+in\s+(.+)$/i)
-                 || t.match(/\bsave\s+to\s+(.+)$/i)
-                 || t.match(/\bשמור\s+ב(.+)$/);
-  if (saveMatch) {
-    const name   = (saveMatch[1] || '').trim();
+  // ── SELECT DESTINATION FOLDER ──────────────────────────────────────────────
+  // Works at the START or END of recording — sets the folder for the next save.
+  // Accepted:  "save to Work"        "save in Work"
+  //            "save to folder Work" "save in folder Work"
+  //            "add to Work"         "add in Work"
+  //            "add to folder Work"  "add in folder Work"
+  //            Hebrew: "שמור ב[name]"
+  const saveToMatch = tn.match(/\b(?:save|add)\s+(?:to|in)\s+(?:folder\s+)?(.+)$/i)
+                   || tn.match(/\bשמור\s+ב(.+)$/);
+  if (saveToMatch) {
+    const name   = (saveToMatch[1] || '').trim();
     const folder = S.folders.find(f => f.name.toLowerCase() === name.toLowerCase());
     if (folder) {
       stripFromTranscript(t);
