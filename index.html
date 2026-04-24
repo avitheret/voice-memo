@@ -499,7 +499,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 2, minor: 18 };
+const VERSION = { major: 2, minor: 19 };
 const DB_KEY  = 'MAIN';   // single shared DB — all devices auto-connect
 const API     = 'https://voice-memo-avi.netlify.app/api/memos'; // absolute so GitHub Pages works too
 const SILENCE_MS = 3000;   // auto-stop after 3 s of silence
@@ -722,6 +722,28 @@ function esc(s) {
 }
 
 // ── SAVE / CLEAR ──────────────────────────────────────────────────────────────
+function resetRecorder() {
+  // Bring every recorder UI element back to first-load state
+  recLabel.textContent = 'READY';
+  recLabel.classList.remove('live', 'cmd');
+  recTimer.textContent = '00:00';
+  recHint.textContent  = 'CLICK TO BEGIN RECORDING';
+  recBtn.classList.remove('recording');
+  vizWrap.classList.remove('active');
+  vizLabel.textContent = 'AUDIO INPUT';
+  vuMeter.textContent  = '–∞ dB';
+  saveBtn.disabled = clearBtn.disabled = true;
+  setStatus('', 'IDLE');
+  drawIdle();
+
+  // On iOS the audio session isn't released instantly after stopRec().
+  // Lock the button for 800 ms so the next recording starts into a clean session.
+  if (isIOS) {
+    recBtn.disabled = true;
+    setTimeout(() => { recBtn.disabled = false; }, 800);
+  }
+}
+
 function saveMemo() {
   if (S.recording) stopRec();
   S.saveOnSilence = false;
@@ -732,11 +754,12 @@ function saveMemo() {
   const memo = { id: Date.now(), text, duration: S.seconds, date: new Date().toISOString(), lang: S.lang, folderId: fid || null };
   S.memos.unshift(memo); persist();
   S.finalTx = ''; S.interimTx = ''; S.seconds = 0; S.pendingFolder = null;
-  recTimer.textContent = '00:00';
-  renderTx(); saveBtn.disabled = clearBtn.disabled = true;
+  renderTx();
   renderFolderChips();
   const folderName = fid ? (S.folders.find(f => f.id === fid)?.name || 'folder') : null;
-  renderMemos(); toast(folderName ? `Saved to "${folderName}"` : 'Memo saved');
+  renderMemos();
+  toast(folderName ? `Saved to "${folderName}"` : 'Memo saved');
+  resetRecorder();
   pushMemos();
 }
 
