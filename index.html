@@ -499,7 +499,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 2, minor: 16 };
+const VERSION = { major: 2, minor: 17 };
 const DB_KEY  = 'MAIN';   // single shared DB — all devices auto-connect
 const API     = 'https://voice-memo-avi.netlify.app/api/memos'; // absolute so GitHub Pages works too
 const SILENCE_MS = 3000;   // auto-stop after 3 s of silence
@@ -639,8 +639,14 @@ async function startRec() {
     if (e.error !== 'no-speech') setStatus('err', 'ERR: ' + e.error.toUpperCase());
   };
 
+  // Capture THIS instance in the closure — guards against a race condition on iOS
+  // where the previous session's onend fires after a new session has already started,
+  // calling .start() on the new (already-running) recogniser and killing it.
+  const thisRecognition = S.recognition;
   S.recognition.onend = () => {
-    if (S.recording) try { S.recognition.start(); } catch(_) {}
+    if (S.recording && S.recognition === thisRecognition) {
+      try { S.recognition.start(); } catch(_) {}
+    }
   };
 
   S.recognition.start();
