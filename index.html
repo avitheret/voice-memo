@@ -499,7 +499,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 2, minor: 20 };
+const VERSION = { major: 2, minor: 21 };
 const DB_KEY  = 'MAIN';   // single shared DB — all devices auto-connect
 const API     = 'https://voice-memo-avi.netlify.app/api/memos'; // absolute so GitHub Pages works too
 const SILENCE_MS = 3000;   // auto-stop after 3 s of silence
@@ -603,8 +603,15 @@ function startRec() {
   S.recognition.interimResults = true;
   S.recognition.lang           = S.lang;
 
+  // Count consecutive restarts with no results — iOS sometimes enters a loop
+  // where onend fires immediately each time without ever producing speech.
+  // If this happens 4 times in a row, the session is broken; stop cleanly.
+  let restartsWithoutResults = 0;
+
   S.recognition.onresult = e => {
-    let speechDetected = false;
+    restartsWithoutResults = 0;   // got results — session is healthy
+    resetSilenceTimer();          // always reset on ANY result so the 3 s timer
+                                  // can't fire while speech is still arriving
     let interim = '';
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const t = e.results[i][0]?.transcript ?? '';
@@ -612,28 +619,39 @@ function startRec() {
         if (!checkVoiceCommands(t.trim())) {
           S.finalTx += t + ' ';
         }
-        speechDetected = true;
       } else {
         interim = t;
-        if (t.trim().length > 1) speechDetected = true;
       }
     }
     S.interimTx = interim;
     renderTx();
-    if (speechDetected) resetSilenceTimer();
   };
 
   S.recognition.onerror = e => {
-    if (e.error !== 'no-speech') setStatus('err', 'ERR: ' + e.error.toUpperCase());
+    if (e.error !== 'no-speech' && e.error !== 'aborted') {
+      console.warn('SR error:', e.error);
+      setStatus('err', 'ERR: ' + e.error.toUpperCase());
+    }
   };
 
   // Guard onend with a closure reference so a stale session can't restart
   // the new one (iOS fires onend asynchronously, after the next session starts).
   const thisRecognition = S.recognition;
   S.recognition.onend = () => {
-    if (S.recording && S.recognition === thisRecognition) {
-      try { S.recognition.start(); } catch(_) {}
+    if (!S.recording || S.recognition !== thisRecognition) return;
+    restartsWithoutResults++;
+    if (restartsWithoutResults > 4) {
+      // iOS is refusing to run this session — give up and reset
+      stopRec();
+      toast('Tap Record to start again');
+      return;
     }
+    // Small delay on iOS lets the audio session settle between restarts —
+    // without it, iOS sometimes refuses the second session and stops immediately.
+    setTimeout(() => {
+      if (!S.recording || S.recognition !== thisRecognition) return;
+      try { S.recognition.start(); } catch(_) {}
+    }, isIOS ? 200 : 0);
   };
 
   try { S.recognition.start(); } catch(e) {
