@@ -499,7 +499,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 2, minor: 17 };
+const VERSION = { major: 2, minor: 18 };
 const DB_KEY  = 'MAIN';   // single shared DB — all devices auto-connect
 const API     = 'https://voice-memo-avi.netlify.app/api/memos'; // absolute so GitHub Pages works too
 const SILENCE_MS = 3000;   // auto-stop after 3 s of silence
@@ -590,22 +590,14 @@ if (new URLSearchParams(location.search).get('autostart') === '1') {
 // ── RECORD ────────────────────────────────────────────────────────────────────
 recBtn.addEventListener('click', () => S.recording ? stopRec() : startRec());
 
-async function startRec() {
+function startRec() {
   if (!SR || S.recording) return;
   S.recording = true;
 
-  // Mic → analyser for live waveform
-  try {
-    S.stream   = await navigator.mediaDevices.getUserMedia({ audio: true });
-    S.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    S.analyser = S.audioCtx.createAnalyser();
-    S.analyser.fftSize = 256;
-    S.audioCtx.createMediaStreamSource(S.stream).connect(S.analyser);
-  } catch(e) {
-    console.warn('Mic access denied, visualizer off:', e);
-  }
-
-  // Speech recognition
+  // ── Speech recognition ────────────────────────────────────────────────────
+  // Start recognition FIRST — before any async work — so it runs inside the
+  // click-event user-gesture context. On iOS, the gesture token expires at the
+  // first await, so calling .start() after getUserMedia breaks on the 2nd recording.
   S.recognition = new SR();
   S.recognition.continuous     = true;
   S.recognition.interimResults = true;
@@ -620,13 +612,9 @@ async function startRec() {
         if (!checkVoiceCommands(t.trim())) {
           S.finalTx += t + ' ';
         }
-        speechDetected = true;               // confirmed word(s) → reset timer
+        speechDetected = true;
       } else {
         interim = t;
-        // Only count non-trivial interim as speech; Chrome emits onresult
-        // continuously with empty strings for ambient noise when
-        // interimResults:true — resetting on those prevents the 5s countdown
-        // from ever completing.
         if (t.trim().length > 1) speechDetected = true;
       }
     }
@@ -639,9 +627,8 @@ async function startRec() {
     if (e.error !== 'no-speech') setStatus('err', 'ERR: ' + e.error.toUpperCase());
   };
 
-  // Capture THIS instance in the closure — guards against a race condition on iOS
-  // where the previous session's onend fires after a new session has already started,
-  // calling .start() on the new (already-running) recogniser and killing it.
+  // Guard onend with a closure reference so a stale session can't restart
+  // the new one (iOS fires onend asynchronously, after the next session starts).
   const thisRecognition = S.recognition;
   S.recognition.onend = () => {
     if (S.recording && S.recognition === thisRecognition) {
@@ -649,8 +636,13 @@ async function startRec() {
     }
   };
 
-  S.recognition.start();
+  try { S.recognition.start(); } catch(e) {
+    S.recording = false;
+    setStatus('err', 'MIC ERROR');
+    return;
+  }
 
+  // ── UI ────────────────────────────────────────────────────────────────────
   S.seconds = 0;
   recBtn.classList.add('recording');
   vizWrap.classList.add('active');
@@ -658,10 +650,28 @@ async function startRec() {
   recLabel.textContent = '● REC'; recLabel.classList.add('live');
   recHint.textContent  = 'CLICK TO STOP';
   setStatus('on', 'RECORDING');
-
   S.timerID = setInterval(() => { S.seconds++; recTimer.textContent = fmt(S.seconds); }, 1000);
   resetSilenceTimer();
-  S.analyser ? drawLive() : drawFakeWave();
+
+  // ── Waveform visualiser ───────────────────────────────────────────────────
+  // On iOS, getUserMedia fights SpeechRecognition for the audio session and
+  // breaks subsequent recordings — skip it and use the animated wave instead.
+  // On desktop, get mic access for the live FFT waveform.
+  if (isIOS) {
+    drawFakeWave();
+  } else {
+    drawFakeWave();   // show immediately; switch to live when mic resolves
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+      if (!S.recording) { stream.getTracks().forEach(t => t.stop()); return; }
+      S.stream   = stream;
+      S.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      S.analyser = S.audioCtx.createAnalyser();
+      S.analyser.fftSize = 256;
+      S.audioCtx.createMediaStreamSource(S.stream).connect(S.analyser);
+      cancelAnimationFrame(S.raf);
+      drawLive();
+    }).catch(e => console.warn('Visualizer mic:', e));
+  }
 }
 
 function stopRec() {
