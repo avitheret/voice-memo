@@ -499,7 +499,7 @@ main { display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 <script>
 // ── VERSION ───────────────────────────────────────────────────────────────────
-const VERSION = { major: 2, minor: 21 };
+const VERSION = { major: 2, minor: 22 };
 const DB_KEY  = 'MAIN';   // single shared DB — all devices auto-connect
 const API     = 'https://voice-memo-avi.netlify.app/api/memos'; // absolute so GitHub Pages works too
 const SILENCE_MS = 3000;   // auto-stop after 3 s of silence
@@ -640,18 +640,13 @@ function startRec() {
   S.recognition.onend = () => {
     if (!S.recording || S.recognition !== thisRecognition) return;
     restartsWithoutResults++;
-    if (restartsWithoutResults > 4) {
-      // iOS is refusing to run this session — give up and reset
+    if (restartsWithoutResults > 15) {
+      // Session is completely dead — give up
       stopRec();
       toast('Tap Record to start again');
       return;
     }
-    // Small delay on iOS lets the audio session settle between restarts —
-    // without it, iOS sometimes refuses the second session and stops immediately.
-    setTimeout(() => {
-      if (!S.recording || S.recognition !== thisRecognition) return;
-      try { S.recognition.start(); } catch(_) {}
-    }, isIOS ? 200 : 0);
+    try { S.recognition.start(); } catch(_) {}
   };
 
   try { S.recognition.start(); } catch(e) {
@@ -669,7 +664,14 @@ function startRec() {
   recHint.textContent  = 'CLICK TO STOP';
   setStatus('on', 'RECORDING');
   S.timerID = setInterval(() => { S.seconds++; recTimer.textContent = fmt(S.seconds); }, 1000);
-  resetSilenceTimer();
+
+  // Don't start the 3 s silence timer yet — only start it after the FIRST
+  // speech result arrives (onresult calls resetSilenceTimer).  Starting it here
+  // means iOS's recognition restart loop (which can take 1–2 s to settle) burns
+  // through the silence window before the user has said a word.
+  // Safety net: if nothing at all is spoken in 10 s, stop quietly.
+  clearTimeout(S.silenceTimer);
+  S.silenceTimer = setTimeout(() => { if (S.recording) stopRec(); }, 10000);
 
   // ── Waveform visualiser ───────────────────────────────────────────────────
   // On iOS, getUserMedia fights SpeechRecognition for the audio session and
@@ -698,7 +700,7 @@ function stopRec() {
   S.interimTx      = '';
 
   clearTimeout(S.silenceTimer); S.silenceTimer = null;
-  if (S.recognition) { S.recognition.stop(); S.recognition = null; }
+  if (S.recognition) { try { S.recognition.abort(); } catch(_) {} S.recognition = null; }
   if (S.stream)      { S.stream.getTracks().forEach(t => t.stop()); S.stream = null; }
   if (S.audioCtx)    { S.audioCtx.close(); S.audioCtx = null; S.analyser = null; }
 
